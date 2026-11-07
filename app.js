@@ -296,21 +296,34 @@ function discover(){
             <span class="status">${db.games.length} ігор
             </span>
             </div>
-            <div class="toolbar">
-            <input class="search" id="gameSearch" placeholder="⌕  Пошук ігор..." aria-label="Пошук ігор">
+            
+        <div class="toolbar">
+            <input
+                class="search"
+                id="gameSearch"
+                placeholder="⌕ Пошук ігор..."
+                aria-label="Пошук ігор"
+            >
+
             <select class="search" id="genreFilter" aria-label="Фільтр за жанром">
-            <option value="">Усі жанри
-            </option>${[...new Set(db.games.map(g=>g.genre))].map(x=>`
-            <option>${esc(x)}
-            </option>`).join('')}
+                <option value="">Усі жанри</option>
+                ${[...new Set(db.games.map(g => g.genre))].map(x => `
+                    <option>${esc(x)}</option>
+                `).join('')}
             </select>
+
             <select class="search" id="platformFilter" aria-label="Фільтр за платформою">
-            <option value="">Усі платформи
-            </option>${[...new Set(db.games.map(g=>g.platform))].map(x=>`
-            <option>${esc(x)}
-            </option>`).join('')}
+                <option value="">Усі платформи</option>
+                ${[...new Set(db.games.map(g => g.platform))].map(x => `
+                    <option>${esc(x)}</option>
+                `).join('')}
             </select>
-            </div>
+
+            <button class="btn" id="resetFilters" type="button">
+                Скинути фільтри
+            </button>
+        </div>
+
             <div class="grid" id="gameGrid">${db.games.map(gameCard).join('')}
             </div>
             </main>`;
@@ -320,8 +333,13 @@ function discover(){
     filterGames);
     $('#genreFilter').addEventListener('change',
     filterGames);
-    $('#platformFilter').addEventListener('change',
-    filterGames)
+    $('#resetFilters').addEventListener('click', () => {
+    $('#gameSearch').value = '';
+    $('#genreFilter').value = '';
+    $('#platformFilter').value = '';
+
+    filterGames();
+});
 }
 
 function filterGames() {
