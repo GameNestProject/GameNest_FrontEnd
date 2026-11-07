@@ -190,38 +190,74 @@ function poster(g){
             </span>
             </div>`
 }
-function gameCard(g){
-    const st=library()[g.id];
+
+function gameCard(g) {
+    const st = library()[g.id];
+
     return `
-            <article class="game-card">${poster(g)}
+        <article class="game-card" aria-label="Гра ${esc(g.title)}">
+            ${poster(g)}
+
             <div class="card-body">
-            <div class="card-title-row">
-            <div>
-            <h3>${esc(g.title)}
-            </h3>
-            <div class="small muted">${esc(g.platform)} · ${esc(g.year)}
+                <div class="card-title-row">
+                    <div>
+                        <h3>${esc(g.title)}</h3>
+                        <div class="small muted">
+                            ${esc(g.platform)} · ${esc(g.year)}
+                        </div>
+                    </div>
+
+                    ${st ? `
+                        <span
+                            class="status ${statusClass(st)}"
+                            aria-label="Статус гри: ${esc(st)}"
+                        >
+                            ${esc(st)}
+                        </span>
+                    ` : ''}
+                </div>
+
+                <div class="tag-row">
+                    <span class="tag">${esc(g.genre)}</span>
+                    <span class="tag">
+                        ${esc(g.developer || 'Невідомий розробник')}
+                    </span>
+                </div>
+
+                <div class="card-bottom">
+                    <button
+                        class="btn"
+                        data-game="${esc(g.id)}"
+                        aria-label="Детальніше про гру ${esc(g.title)}"
+                    >
+                        Детальніше
+                    </button>
+
+                    ${st ? `
+                        <button
+                            class="icon-btn"
+                            title="Змінити статус"
+                            aria-label="Змінити статус гри ${esc(g.title)}"
+                            data-status="${esc(g.id)}"
+                        >
+                            ↻
+                        </button>
+                    ` : `
+                        <button
+                            class="icon-btn"
+                            title="Додати до бібліотеки"
+                            aria-label="Додати гру ${esc(g.title)} до бібліотеки"
+                            data-add="${esc(g.id)}"
+                        >
+                            ＋
+                        </button>
+                    `}
+                </div>
             </div>
-            </div>${st?`
-            <span class="status ${statusClass(st)}">${esc(st)}
-            </span>`:''}
-            </div>
-            <div class="tag-row">
-            <span class="tag">${esc(g.genre)}
-            </span>
-            <span class="tag">${esc(g.developer||'Невідомий розробник')}
-            </span>
-            </div>
-            <div class="card-bottom">
-            <button class="btn" data-game="${g.id}">Детальніше
-            </button>${st?`
-            <button class="icon-btn" title="Змінити статус" data-status="${g.id}">↻
-            </button>`:`
-            <button class="icon-btn" title="Додати до бібліотеки" data-add="${g.id}">＋
-            </button>`}
-            </div>
-            </div>
-            </article>`
+        </article>
+    `;
 }
+
 function discover(){
     const content=`
             <main class="container">
