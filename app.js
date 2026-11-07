@@ -61,17 +61,54 @@ lists:{
 }
 }
 }
-let db;
-try{
-    db=JSON.parse(localStorage.getItem(STORAGE))||fresh()
+
+function loadDatabase() {
+    try {
+        const saved = localStorage.getItem(STORAGE);
+
+        if (!saved) {
+            return fresh();
+        }
+
+        const parsed = JSON.parse(saved);
+
+        if (
+            !parsed ||
+            typeof parsed !== 'object' ||
+            !Array.isArray(parsed.games) ||
+            !Array.isArray(parsed.users)
+        ) {
+            return fresh();
+        }
+
+        return {
+            ...fresh(),
+            ...parsed,
+            libraries: parsed.libraries || {},
+            proposals: Array.isArray(parsed.proposals)
+                ? parsed.proposals
+                : [],
+            lists: parsed.lists || {}
+        };
+    } catch (error) {
+        console.error('Помилка завантаження даних:', error);
+        return fresh();
+    }
 }
-catch{
-    db=fresh()
+
+let db = loadDatabase();
+
+function save() {
+    try {
+        localStorage.setItem(STORAGE, JSON.stringify(db));
+        return true;
+    } catch (error) {
+        console.error('Помилка збереження даних:', error);
+        toast('Не вдалося зберегти дані. Перевір доступне місце у сховищі.');
+        return false;
+    }
 }
-function save(){
-    localStorage.setItem(STORAGE,
-    JSON.stringify(db))
-}
+
 function esc(v=''){
     return String(v).replace(/[&<>"']/g,
     c=>({
@@ -153,38 +190,74 @@ function poster(g){
             </span>
             </div>`
 }
-function gameCard(g){
-    const st=library()[g.id];
+
+function gameCard(g) {
+    const st = library()[g.id];
+
     return `
-            <article class="game-card">${poster(g)}
+        <article class="game-card" aria-label="Гра ${esc(g.title)}">
+            ${poster(g)}
+
             <div class="card-body">
-            <div class="card-title-row">
-            <div>
-            <h3>${esc(g.title)}
-            </h3>
-            <div class="small muted">${esc(g.platform)} · ${esc(g.year)}
+                <div class="card-title-row">
+                    <div>
+                        <h3>${esc(g.title)}</h3>
+                        <div class="small muted">
+                            ${esc(g.platform)} · ${esc(g.year)}
+                        </div>
+                    </div>
+
+                    ${st ? `
+                        <span
+                            class="status ${statusClass(st)}"
+                            aria-label="Статус гри: ${esc(st)}"
+                        >
+                            ${esc(st)}
+                        </span>
+                    ` : ''}
+                </div>
+
+                <div class="tag-row">
+                    <span class="tag">${esc(g.genre)}</span>
+                    <span class="tag">
+                        ${esc(g.developer || 'Невідомий розробник')}
+                    </span>
+                </div>
+
+                <div class="card-bottom">
+                    <button
+                        class="btn"
+                        data-game="${esc(g.id)}"
+                        aria-label="Детальніше про гру ${esc(g.title)}"
+                    >
+                        Детальніше
+                    </button>
+
+                    ${st ? `
+                        <button
+                            class="icon-btn"
+                            title="Змінити статус"
+                            aria-label="Змінити статус гри ${esc(g.title)}"
+                            data-status="${esc(g.id)}"
+                        >
+                            ↻
+                        </button>
+                    ` : `
+                        <button
+                            class="icon-btn"
+                            title="Додати до бібліотеки"
+                            aria-label="Додати гру ${esc(g.title)} до бібліотеки"
+                            data-add="${esc(g.id)}"
+                        >
+                            ＋
+                        </button>
+                    `}
+                </div>
             </div>
-            </div>${st?`
-            <span class="status ${statusClass(st)}">${esc(st)}
-            </span>`:''}
-            </div>
-            <div class="tag-row">
-            <span class="tag">${esc(g.genre)}
-            </span>
-            <span class="tag">${esc(g.developer||'Невідомий розробник')}
-            </span>
-            </div>
-            <div class="card-bottom">
-            <button class="btn" data-game="${g.id}">Детальніше
-            </button>${st?`
-            <button class="icon-btn" title="Змінити статус" data-status="${g.id}">↻
-            </button>`:`
-            <button class="icon-btn" title="Додати до бібліотеки" data-add="${g.id}">＋
-            </button>`}
-            </div>
-            </div>
-            </article>`
+        </article>
+    `;
 }
+
 function discover(){
     const content=`
             <main class="container">
@@ -223,21 +296,34 @@ function discover(){
             <span class="status">${db.games.length} ігор
             </span>
             </div>
-            <div class="toolbar">
-            <input class="search" id="gameSearch" placeholder="⌕  Пошук ігор..." aria-label="Пошук ігор">
+            
+        <div class="toolbar">
+            <input
+                class="search"
+                id="gameSearch"
+                placeholder="⌕ Пошук ігор..."
+                aria-label="Пошук ігор"
+            >
+
             <select class="search" id="genreFilter" aria-label="Фільтр за жанром">
-            <option value="">Усі жанри
-            </option>${[...new Set(db.games.map(g=>g.genre))].map(x=>`
-            <option>${esc(x)}
-            </option>`).join('')}
+                <option value="">Усі жанри</option>
+                ${[...new Set(db.games.map(g => g.genre))].map(x => `
+                    <option>${esc(x)}</option>
+                `).join('')}
             </select>
+
             <select class="search" id="platformFilter" aria-label="Фільтр за платформою">
-            <option value="">Усі платформи
-            </option>${[...new Set(db.games.map(g=>g.platform))].map(x=>`
-            <option>${esc(x)}
-            </option>`).join('')}
+                <option value="">Усі платформи</option>
+                ${[...new Set(db.games.map(g => g.platform))].map(x => `
+                    <option>${esc(x)}</option>
+                `).join('')}
             </select>
-            </div>
+
+            <button class="btn" id="resetFilters" type="button">
+                Скинути фільтри
+            </button>
+        </div>
+
             <div class="grid" id="gameGrid">${db.games.map(gameCard).join('')}
             </div>
             </main>`;
@@ -247,19 +333,61 @@ function discover(){
     filterGames);
     $('#genreFilter').addEventListener('change',
     filterGames);
-    $('#platformFilter').addEventListener('change',
-    filterGames)
+    $('#resetFilters').addEventListener('click', () => {
+    $('#gameSearch').value = '';
+    $('#genreFilter').value = '';
+    $('#platformFilter').value = '';
+
+    filterGames();
+});
 }
-function filterGames(){
-    const q=$('#gameSearch').value.toLowerCase(),
-    genre=$('#genreFilter').value,
-    platform=$('#platformFilter').value;
-    const arr=db.games.filter(g=>(`${g.title} ${g.developer} ${g.description}`.toLowerCase().includes(q))&&(!genre||g.genre===genre)&&(!platform||g.platform===platform));
-    $('#gameGrid').innerHTML=arr.length?arr.map(gameCard).join(''):`
-            <div class="empty" style="grid-column:1/-1">Нічого не знайдено. Спробуй змінити пошуковий запит або фільтри.
-            </div>`;
-    bind()
+
+function filterGames() {
+    const searchInput = $('#gameSearch');
+    const genreFilter = $('#genreFilter');
+    const platformFilter = $('#platformFilter');
+
+    const query = searchInput.value
+        .trim()
+        .toLowerCase();
+
+    const genre = genreFilter.value;
+    const platform = platformFilter.value;
+
+    const filteredGames = db.games.filter(game => {
+        const searchableText = [
+            game.title,
+            game.developer,
+            game.publisher,
+            game.genre,
+            game.platform,
+            game.description
+        ]
+            .filter(Boolean)
+            .join(' ')
+            .toLowerCase();
+
+        const matchesSearch = searchableText.includes(query);
+        const matchesGenre = !genre || game.genre === genre;
+        const matchesPlatform = !platform || game.platform === platform;
+
+        return matchesSearch && matchesGenre && matchesPlatform;
+    });
+
+    const gameGrid = $('#gameGrid');
+
+    gameGrid.innerHTML = filteredGames.length
+        ? filteredGames.map(gameCard).join('')
+        : `
+            <div class="empty" style="grid-column:1/-1">
+                <h3>Нічого не знайдено</h3>
+                <p>Спробуй змінити пошуковий запит або фільтри.</p>
+            </div>
+        `;
+
+    bind();
 }
+
 function auth(mode='login'){
     const isReg=mode==='register';
     $('#app').innerHTML=
