@@ -323,16 +323,53 @@ function discover(){
     $('#platformFilter').addEventListener('change',
     filterGames)
 }
-function filterGames(){
-    const q=$('#gameSearch').value.toLowerCase(),
-    genre=$('#genreFilter').value,
-    platform=$('#platformFilter').value;
-    const arr=db.games.filter(g=>(`${g.title} ${g.developer} ${g.description}`.toLowerCase().includes(q))&&(!genre||g.genre===genre)&&(!platform||g.platform===platform));
-    $('#gameGrid').innerHTML=arr.length?arr.map(gameCard).join(''):`
-            <div class="empty" style="grid-column:1/-1">Нічого не знайдено. Спробуй змінити пошуковий запит або фільтри.
-            </div>`;
-    bind()
+
+function filterGames() {
+    const searchInput = $('#gameSearch');
+    const genreFilter = $('#genreFilter');
+    const platformFilter = $('#platformFilter');
+
+    const query = searchInput.value
+        .trim()
+        .toLowerCase();
+
+    const genre = genreFilter.value;
+    const platform = platformFilter.value;
+
+    const filteredGames = db.games.filter(game => {
+        const searchableText = [
+            game.title,
+            game.developer,
+            game.publisher,
+            game.genre,
+            game.platform,
+            game.description
+        ]
+            .filter(Boolean)
+            .join(' ')
+            .toLowerCase();
+
+        const matchesSearch = searchableText.includes(query);
+        const matchesGenre = !genre || game.genre === genre;
+        const matchesPlatform = !platform || game.platform === platform;
+
+        return matchesSearch && matchesGenre && matchesPlatform;
+    });
+
+    const gameGrid = $('#gameGrid');
+
+    gameGrid.innerHTML = filteredGames.length
+        ? filteredGames.map(gameCard).join('')
+        : `
+            <div class="empty" style="grid-column:1/-1">
+                <h3>Нічого не знайдено</h3>
+                <p>Спробуй змінити пошуковий запит або фільтри.</p>
+            </div>
+        `;
+
+    bind();
 }
+
 function auth(mode='login'){
     const isReg=mode==='register';
     $('#app').innerHTML=
