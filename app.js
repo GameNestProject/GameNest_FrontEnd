@@ -61,17 +61,54 @@ lists:{
 }
 }
 }
-let db;
-try{
-    db=JSON.parse(localStorage.getItem(STORAGE))||fresh()
+
+function loadDatabase() {
+    try {
+        const saved = localStorage.getItem(STORAGE);
+
+        if (!saved) {
+            return fresh();
+        }
+
+        const parsed = JSON.parse(saved);
+
+        if (
+            !parsed ||
+            typeof parsed !== 'object' ||
+            !Array.isArray(parsed.games) ||
+            !Array.isArray(parsed.users)
+        ) {
+            return fresh();
+        }
+
+        return {
+            ...fresh(),
+            ...parsed,
+            libraries: parsed.libraries || {},
+            proposals: Array.isArray(parsed.proposals)
+                ? parsed.proposals
+                : [],
+            lists: parsed.lists || {}
+        };
+    } catch (error) {
+        console.error('Помилка завантаження даних:', error);
+        return fresh();
+    }
 }
-catch{
-    db=fresh()
+
+let db = loadDatabase();
+
+function save() {
+    try {
+        localStorage.setItem(STORAGE, JSON.stringify(db));
+        return true;
+    } catch (error) {
+        console.error('Помилка збереження даних:', error);
+        toast('Не вдалося зберегти дані. Перевір доступне місце у сховищі.');
+        return false;
+    }
 }
-function save(){
-    localStorage.setItem(STORAGE,
-    JSON.stringify(db))
-}
+
 function esc(v=''){
     return String(v).replace(/[&<>"']/g,
     c=>({
