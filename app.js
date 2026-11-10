@@ -281,7 +281,7 @@ function discover(){
             </div>
             </div>
             <div class="hero-art">
-            <img src="assets/gamenest-logo.png" alt="">
+            <img src="assets/photo_2026-11-10_13-38-08.jpg" alt="">
             </div>
             </section>
             <div class="section-head" id="catalog">
