@@ -5,35 +5,17 @@
     root=document) => [...root.querySelectorAll(s)];
     const STORAGE = 'gamenest_v1';
     const { STATUSES, seedGames } = window.GameNestData;
+    const session = window.GameNestSession;
     const statusClass = s => s==='Граю'?'playing':s==='Закінчена'?'completed':s==='Відкладена'?'wishlist':'';
-    
+    // Catalog, library and proposals are still local (this browser only) until their backend integration.
+    // Users, passwords and roles are NOT stored locally any more: they come from the backend session.
+    const LOCAL_NOTICE = 'Ці дані поки зберігаються лише в цьому браузері й не синхронізуються із сервером GameNest.';
+    let rerender = () => discover();
+
 function fresh(){
     return {
         games:seedGames,
-        users:[{
-            id:'admin',
-            name:'Адміністратор',
-            email:'admin@gamenest.local',
-            password:'admin123',
-            role:'admin'
-        },
-    {
-        id:'demo',
-        name:'Марія',
-        email:'user@example.com',
-        password:'user123',
-        role:'user'
-    }
-],
-currentUser:null,
 libraries:{
-    demo:{
-        g1:'Граю',
-        g2:'Куплена',
-        g5:'Закінчена'
-    },
-admin:{
-}
 },
 proposals:[{
     id:'p1',
@@ -75,21 +57,27 @@ function loadDatabase() {
         if (
             !parsed ||
             typeof parsed !== 'object' ||
-            !Array.isArray(parsed.games) ||
-            !Array.isArray(parsed.users)
+            !Array.isArray(parsed.games)
         ) {
             return fresh();
         }
 
-        return {
+        // Older versions stored demo users with plain-text passwords and the logged-in user here.
+        // Drop them; the purged data is written back below.
+        const { users, currentUser, ...rest } = parsed;
+        const migrated = {
             ...fresh(),
-            ...parsed,
-            libraries: parsed.libraries || {},
-            proposals: Array.isArray(parsed.proposals)
-                ? parsed.proposals
+            ...rest,
+            libraries: rest.libraries || {},
+            proposals: Array.isArray(rest.proposals)
+                ? rest.proposals
                 : [],
-            lists: parsed.lists || {}
+            lists: rest.lists || {}
         };
+        if (users !== undefined || currentUser !== undefined) {
+            try { localStorage.setItem(STORAGE, JSON.stringify(migrated)); } catch { /* ignore */ }
+        }
+        return migrated;
     } catch (error) {
         console.error('Помилка завантаження даних:', error);
         return fresh();
@@ -120,15 +108,22 @@ function esc(v=''){
     }
 [c]))
 }
+// Signed-in user from GET /api/Profile ({ id, username, email, role, emailConfirmed, isAdmin }), or null.
 function me(){
-    return db.users.find(u=>u.id===db.currentUser)||null
+    return session.isAuthenticated?session.user:null
 }
+// Local library of the signed-in backend user (keyed by the backend user id).
 function library(){
     const u=me();
-    return u?(db.libraries[u.id]||(db.libraries[u.id]={
-    }
-)):{
+    if(!u)return {};
+    const key='user:'+u.id;
+    return db.libraries[key]||(db.libraries[key]={
+    })
 }
+function localNotice(){
+    return `
+            <div class="notice" role="note">${esc(LOCAL_NOTICE)}
+            </div>`
 }
 function gameById(id){
     return db.games.find(g=>g.id===id)
@@ -141,12 +136,31 @@ function toast(msg){
     toast.t=setTimeout(()=>el.classList.remove('show'),
     2800)
 }
+function sessionControls(u){
+    if(u)return `
+            <button data-action="logout">Вийти
+            </button>
+            <span class="user-pill" title="${esc(u.username)}">${esc((u.username||'?').slice(0,1).toUpperCase())}
+            </span>`;
+    const st=session.state.status;
+    if(st==='loading')return `
+            <button class="login" disabled aria-busy="true">Вхід…
+            </button>`;
+    if(st==='error')return `
+            <button class="login" data-action="retry-profile" title="${esc(session.state.error||'')}">Профіль недоступний · повторити
+            </button>
+            <button data-action="logout">Вийти
+            </button>`;
+    return `
+            <button class="login" data-go="auth">Увійти через Google
+            </button>`
+}
 function header(active='discover'){
     const u=me();
     return `
             <header class="topbar">
             <a class="brand" href="#" data-go="discover">
-            <img src="assets/photo_2026-11-10_13-38-08.jpg" alt="GameNest">
+            <img src="assets/gamenest-logo.png" alt="GameNest">
             <div>Game
             <span>Nest
             </span>
@@ -158,15 +172,9 @@ function header(active='discover'){
             <button data-go="library" class="${active==='library'?'active':''}">▣ &nbsp;Моя бібліотека
             </button>
             <button data-go="profile" class="${active==='profile'?'active':''}">☆ &nbsp;Кабінет
-            </button>${u&&u.role==='admin'?`
+            </button>${u&&u.isAdmin?`
             <button data-go="admin" class="${active==='admin'?'active':''}">⚙ &nbsp;Адмінпанель
-            </button>`:''}${u?`
-            <button data-action="logout">Вийти
-            </button>
-            <span class="user-pill" title="${esc(u.name)}">${esc(u.name.slice(0,1).toUpperCase())}
-            </span>`:`
-            <button class="login" data-go="auth">Увійти / Реєстрація
-            </button>`}
+            </button>`:''}${sessionControls(u)}
             </nav>
             </header>`
 }
@@ -259,6 +267,7 @@ function gameCard(g) {
 }
 
 function discover(){
+    rerender=()=>discover();
     const content=`
             <main class="container">
             <section class="hero">
@@ -281,7 +290,7 @@ function discover(){
             </div>
             </div>
             <div class="hero-art">
-            <img src="assets/photo_2026-11-10_13-38-08.jpg" alt="">
+            <img src="assets/gamenest-logo.png" alt="">
             </div>
             </section>
             <div class="section-head" id="catalog">
@@ -388,8 +397,15 @@ function filterGames() {
     bind();
 }
 
-function auth(mode='login'){
-    const isReg=mode==='register';
+function auth(){
+    rerender=()=>auth();
+    const st=session.state;
+    if(me()){
+        go('discover');
+        return
+    }
+    const configured=!!window.GameNestConfig.googleClientId;
+    const busy=st.status==='loading';
     $('#app').innerHTML=
     `
             <div class="shell">${header('')}
@@ -399,95 +415,54 @@ function auth(mode='login'){
             <img src="assets/gamenest-logo.png" alt="">
             <div class="eyebrow">Ласкаво просимо до GameNest
             </div>
-            <h2>${isReg?'Створи акаунт':'Раді тебе бачити'}
+            <h2>Увійди або створи акаунт
             </h2>
-            <p class="muted small">${isReg?'Збирай власну бібліотеку ігор.':'Увійди, щоб продовжити свою ігрову історію.'}
+            <p class="muted small">Вхід і реєстрація відбуваються через Google. Новий акаунт GameNest створюється автоматично під час першого входу.
             </p>
-            </div>
-            <form id="authForm">${isReg?`
-            <div class="field">
-            <label for="name">Ім’я
-            </label>
-            <input id="name" required placeholder="Як до тебе звертатися">
-            </div>`:''}
-            <div class="field">
-            <label for="email">Електронна пошта
-            </label>
-            <input id="email" type="email" required placeholder="you@example.com">
-            </div>
-            <div class="field">
-            <label for="password">Пароль
-            </label>
-            <input id="password" type="password" required minlength="6" placeholder="Мінімум 6 символів">
-            </div>
-            <button class="btn primary" style="width:100%;margin-top:8px">${isReg?'Зареєструватися':'Увійти'}
+            </div>${st.error?`
+            <div class="notice" role="alert" id="authError">${esc(st.error)}
+            </div>`:''}${st.status==='error'?`
+            <div style="display:flex;gap:10px;margin:12px 0">
+            <button class="btn primary" data-action="retry-profile">Повторити завантаження профілю
             </button>
-            </form>
-            <div class="auth-switch">${isReg?'Вже маєш акаунт?':'Ще не маєш акаунта?'} 
-            <button class="text-button" data-auth="${isReg?'login':'register'}">${isReg?'Увійти':'Зареєструватися'}
+            <button class="btn" data-action="logout">Вийти
             </button>
-            </div>
-            <div class="notice">
-            <b>Демо-доступ для перевірки макета
-            </b>
-            <br>Користувач: 
-            <code>user@example.com
-            </code> / 
-            <code>user123
-            </code>
-            <br>Адміністратор: 
-            <code>admin@gamenest.local
-            </code> / 
-            <code>admin123
-            </code>
-            <br>
-            <span class="small">Це демонстраційна авторизація у браузері, не використовуй реальний пароль.
-            </span>
-            </div>
+            </div>`:''}${busy?`
+            <div class="notice" role="status" aria-live="polite" aria-busy="true">Виконуємо вхід… Перший запит може тривати до хвилини, поки сервер прокидається.
+            </div>`:configured?`
+            <div id="googleButton" style="display:flex;justify-content:center;min-height:44px;margin:18px 0" aria-label="Увійти через Google">
+            </div>`:`
+            <div class="notice" role="alert">Вхід через Google ще не налаштовано: у <code>config.js</code> не задано Google Client ID.
+            </div>`}
+            <p class="small muted">GameNest отримує від Google лише підтверджені ім’я, електронну пошту та фото профілю. Пароль Google нам не передається.
+            </p>
             </section>
             </main>
             </div>`;
     bind();
-    $('#authForm').addEventListener('submit',
-    e=>{
-        e.preventDefault();
-        const email=$('#email').value.trim().toLowerCase(),
-        password=$('#password').value;
-        let u;
-        if(isReg){
-            if(db.users.some(x=>x.email.toLowerCase()===email)){
-                toast('Акаунт з такою поштою вже існує.');
-                return
-            }
-        u={
-            id:'u'+Date.now(),
-            name:$('#name').value.trim(),
-            email,
-            password,
-            role:'user'
+    if(configured&&!busy){
+        const container=$('#googleButton');
+        session.renderGoogleButton(container,onGoogleCredential).catch(()=>{
+            if(container)container.innerHTML=`
+            <div class="notice" role="alert">Не вдалося завантажити кнопку Google. Перевір з’єднання або вимкни блокувальник скриптів і онови сторінку.
+            </div>`
+        })
+    }
+}
+async function onGoogleCredential(credential){
+    try{
+        const {user,isNewUser}=await session.signInWithGoogle(credential);
+        if(user){
+            toast(isNewUser?`Акаунт створено. Вітаємо, ${user.username}!`:`Вхід виконано. Привіт, ${user.username}!`);
+            go('discover')
         }
-    ;
-    db.users.push(u);
-    db.libraries[u.id]={
+    }catch{
+        // The error is already in the session state and shown on the auth page.
+        auth()
     }
-;
-db.lists[u.id]=[];
-}
-else{
-    u=db.users.find(x=>x.email.toLowerCase()===email&&x.password===password);
-    if(!u){
-        toast('Неправильна пошта або пароль.');
-        return
-    }
-}
-db.currentUser=u.id;
-save();
-toast(isReg?'Акаунт створено!':'Вхід виконано.');
-go(u.role==='admin'?'admin':'discover')
-}
-)
 }
 function libraryPage(){
+    rerender=()=>libraryPage();
     const u=me();
     if(!u){
         auth();
@@ -518,6 +493,7 @@ const content=`
             <button class="btn primary" data-go="discover">＋ Знайти гру
             </button>
             </div>
+            ${localNotice()}
             <div class="stat-grid">${[{label:'Ігор у бібліотеці',n:items.length},{label:'Закінчено',n:groups.find(x=>x.s==='Закінчена').n},{label:'Зараз граю',n:groups.find(x=>x.s==='Граю').n}].map(x=>`
             <div class="stat">
             <span class="muted small">${x.label}
@@ -664,6 +640,7 @@ e=>{
     db.proposals.unshift({
         id:'p'+Date.now(),
         userId:u.id,
+        userName:u.username,
         title:f.get('title').trim(),
         platform:f.get('platform'),
         genre:f.get('genre'),
@@ -680,6 +657,7 @@ libraryPage()
 )
 }
 function profile(){
+    rerender=()=>profile();
     const u=me();
     if(!u){
         auth();
@@ -694,15 +672,16 @@ layout(`
             </h1>
             <p class="muted">Профіль, бібліотека та пропозиції нових ігор.
             </p>
+            ${localNotice()}
             <div class="layout-two" style="margin-top:25px">
             <aside class="sidebar">
             <div class="profile-head">
-            <div class="avatar">${esc(u.name.slice(0,1).toUpperCase())}
+            <div class="avatar">${esc((u.username||'?').slice(0,1).toUpperCase())}
             </div>
             <div>
-            <h3 style="margin:0">${esc(u.name)}
+            <h3 style="margin:0">${esc(u.username)}
             </h3>
-            <span class="small muted">${esc(u.email)}
+            <span class="small muted">${esc(u.email)}${u.isAdmin?' · Адміністратор':''}
             </span>
             </div>
             </div>
@@ -821,6 +800,7 @@ e=>{
     db.proposals.unshift({
         id:'p'+Date.now(),
         userId:u.id,
+        userName:u.username,
         title:f.get('title').trim(),
         platform:f.get('platform'),
         genre:f.get('genre'),
@@ -837,8 +817,10 @@ profile()
 )
 }
 function adminPage(tab='proposals'){
+    rerender=()=>adminPage(tab);
     const u=me();
-    if(!u||u.role!=='admin')
+    // The role comes from GET /api/Profile; the backend enforces it on every admin endpoint anyway.
+    if(!u||!u.isAdmin)
     {
         toast('Цей розділ доступний лише адміністратору.');
         go('discover');
@@ -866,7 +848,7 @@ if(tab==='proposals'){
             </th>
             </tr>
             </thead>
-            <tbody>${db.proposals.map(p=>{const owner=db.users.find(x=>x.id===p.userId);return `
+            <tbody>${db.proposals.map(p=>{const owner={name:p.userName};return `
             <tr>
             <td>
             <b>${esc(p.title)}
@@ -967,6 +949,7 @@ layout(`
             </h1>
             <p class="muted">Керуй іграми каталогу та модеруй пропозиції користувачів.
             </p>
+            ${localNotice()}
             <div class="stat-grid" style="margin:24px 0">
             <div class="stat">
             <span class="muted small">Ігор у каталозі
@@ -1101,6 +1084,7 @@ adminPage('games')
 )
 }
 function detail(id){
+    rerender=()=>detail(id);
     const g=gameById(id);
     if(!g){
         go('discover');
@@ -1148,7 +1132,7 @@ layout(`
             </select>
             </div>
             <button class="btn primary" style="width:100%;margin-top:14px" data-save-status="${g.id}">${st?'Зберегти статус':'Додати до бібліотеки'}
-            </button>${me()?.role==='admin'?`
+            </button>${me()?.isAdmin?`
             <hr class="divider">
             <button class="btn" style="width:100%" data-go="admin">Відкрити адмінпанель
             </button>`:''}
@@ -1171,7 +1155,10 @@ save();
 toast('Статус гри збережено.');
 detail(id)
 }
+// Profile data shown as stored on the server (GET /api/Profile). Editing comes with the profile integration;
+// a local-only edit would show a name the server does not know.
 function settings(){
+    rerender=()=>settings();
     const u=me();
     if(!u){
         auth();
@@ -1187,39 +1174,33 @@ layout(`
             </div>
             <h1 style="font-size:36px">Налаштування
             </h1>
-            <p class="muted">Онови ім’я та налаштування облікового запису.
+            <p class="muted">Дані облікового запису GameNest.
             </p>
             </div>
             </div>
             <section class="panel" style="max-width:650px">
-            <form id="settingsForm" class="form-grid">
+            <div class="form-grid">
             <div class="field wide">
-            <label>Ім’я
+            <label for="profileUsername">Ім’я користувача
             </label>
-            <input name="name" required value="${esc(u.name)}">
+            <input id="profileUsername" value="${esc(u.username)}" disabled>
             </div>
             <div class="field wide">
-            <label>Електронна пошта
+            <label for="profileEmail">Електронна пошта
             </label>
-            <input value="${esc(u.email)}" disabled>
+            <input id="profileEmail" value="${esc(u.email)}" disabled>
             </div>
-            <div class="wide">
-            <button class="btn primary">Зберегти зміни
-            </button>
+            <div class="field wide">
+            <label for="profileRole">Роль
+            </label>
+            <input id="profileRole" value="${u.isAdmin?'Адміністратор':'Користувач'}" disabled>
             </div>
-            </form>
+            <div class="wide notice">Зміна імені з’явиться в наступному оновленні.
+            </div>
+            </div>
             </section>
             </main>`,
 'profile');
-$('#settingsForm').addEventListener('submit',
-e=>{
-    e.preventDefault();
-    u.name=new FormData(e.target).get('name').trim();
-    save();
-    toast('Профіль оновлено.');
-    settings()
-}
-)
 }
 function go(page,
 arg){
@@ -1239,16 +1220,15 @@ function bind(){
         go(b.dataset.go)
     }
 ));
-$$('[data-auth]').forEach(b=>b.addEventListener('click',
-()=>auth(b.dataset.auth)));
 $$('[data-action="logout"]').forEach(b=>b.addEventListener('click',
 ()=>{
-    db.currentUser=null;
-    save();
+    session.signOut();
     toast('Ти вийшов з акаунта.');
     discover()
 }
 ));
+$$('[data-action="retry-profile"]').forEach(b=>b.addEventListener('click',
+()=>session.reloadProfile()));
 $$('[data-game]').forEach(b=>b.addEventListener('click',
 ()=>detail(b.dataset.game)));
 $$('[data-add]').forEach(b=>b.addEventListener('click',
@@ -1343,11 +1323,19 @@ $$('[data-deletegame]').forEach(b=>b.addEventListener('click',
 }
 ))
 }
-if(!db.games||!db.users){
+if(!Array.isArray(db.games)){
     db=fresh();
     save()
 }
-if(me())discover();
-else discover();
+// Every session change (sign-in, profile loaded, 401, sign-out) re-renders the current page;
+// pages that need a user fall back to the sign-in page by themselves.
+let lastStatus=session.state.status;
+session.subscribe(st=>{
+    if(lastStatus==='authenticated'&&st.status==='anonymous'&&st.error)toast(st.error);
+    lastStatus=st.status;
+    rerender()
+});
+discover();
+if(session.hasToken())session.restore();
 }
 )();
