@@ -146,7 +146,7 @@ function header(active='discover'){
     return `
             <header class="topbar">
             <a class="brand" href="#" data-go="discover">
-            <img src="assets/gamenest-logo.png" alt="GameNest">
+            <img src="assets/photo_2026-11-10_13-38-08.jpg" alt="GameNest">
             <div>Game
             <span>Nest
             </span>
