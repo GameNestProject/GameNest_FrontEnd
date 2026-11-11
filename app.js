@@ -266,14 +266,99 @@ function gameCard(g) {
     `;
 }
 
+// ---------- Public catalog from the API (GameNestCatalog) ----------
+// API games use numeric ids and their own detail page (apiDetail); local demo games keep gameById()/detail().
+const catalogView={search:'',sort:'asc'};
+const releaseDateFormat=new Intl.DateTimeFormat('uk-UA',{timeZone:'UTC',day:'numeric',month:'long',year:'numeric'});
+function pluralGames(n){
+    const m10=n%10,m100=n%100;
+    if(m10===1&&m100!==11)return `${n} гра`;
+    if(m10>=2&&m10<=4&&(m100<12||m100>14))return `${n} гри`;
+    return `${n} ігор`
+}
+// Placeholder style chosen from the id, so a game always gets the same gradient.
+function apiPoster(g){
+    const style='p'+((g.id%6)+1);
+    return `
+            <div class="poster ${style}${g.coverUrl?' has-cover':''}">${g.coverUrl?`
+            <img class="poster-cover" src="${esc(g.coverUrl)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" data-cover>`:''}
+            <span class="poster-title">${esc(g.title)}
+            </span>
+            </div>`
+}
+function apiGameMeta(g){
+    return [g.developer,g.releaseYear].filter(Boolean).map(esc).join(' · ')
+}
+function apiGameCard(g){
+    return `
+        <article class="game-card" aria-label="Гра ${esc(g.title)}">
+            ${apiPoster(g)}
+            <div class="card-body">
+                <div class="card-title-row">
+                    <div>
+                        <h3>${esc(g.title)}</h3>
+                        <div class="small muted">${apiGameMeta(g)||'&nbsp;'}</div>
+                    </div>
+                </div>${g.publisher?`
+                <div class="tag-row">
+                    <span class="tag">${esc(g.publisher)}</span>
+                </div>`:''}
+                <div class="card-bottom">
+                    <button class="btn" data-api-game="${esc(g.id)}" aria-label="Детальніше про гру ${esc(g.title)}">
+                        Детальніше
+                    </button>
+                </div>
+            </div>
+        </article>`
+}
+function catalogResults(){
+    const cs=window.GameNestCatalog.state;
+    if(cs.status==='idle'||cs.status==='loading')return `
+            <div class="empty" style="grid-column:1/-1" role="status" aria-live="polite" aria-busy="true">
+            <h3>Завантажуємо каталог…
+            </h3>
+            <p>Перший запит може тривати до хвилини, поки сервер прокидається.
+            </p>
+            </div>`;
+    if(cs.status==='error')return `
+            <div class="empty" style="grid-column:1/-1" role="alert">
+            <h3>Не вдалося завантажити каталог
+            </h3>
+            <p>${esc(cs.error||'Спробуй ще раз трохи пізніше.')}
+            </p>
+            <button class="btn primary" data-action="catalog-retry">Спробувати ще раз
+            </button>
+            </div>`;
+    if(!cs.games.length)return `
+            <div class="empty" style="grid-column:1/-1">
+            <h3>Каталог поки порожній
+            </h3>
+            <p>Ігри з’являться тут, щойно адміністратор додасть їх до каталогу GameNest.
+            </p>
+            </div>`;
+    const games=window.GameNestCatalog.query(cs.games,catalogView);
+    return games.length?games.map(apiGameCard).join(''):`
+            <div class="empty" style="grid-column:1/-1">
+            <h3>Нічого не знайдено
+            </h3>
+            <p>Спробуй змінити пошуковий запит.
+            </p>
+            </div>`
+}
+function catalogCount(){
+    const cs=window.GameNestCatalog.state;
+    return cs.status==='success'?pluralGames(cs.games.length):cs.status==='error'?'Недоступно':'Завантаження…'
+}
 function discover(){
     rerender=()=>discover();
+    const cs=window.GameNestCatalog.state;
+    const ready=cs.status==='success'&&cs.games.length>0;
     const content=`
-            <main class="container">
+            <main class="container" data-page="discover">
             <section class="hero">
             <div>
             <div class="eyebrow">Твій особистий ігровий простір
-    
+
             </div>
             <h1>Твої ігри.
             <br>
@@ -299,104 +384,190 @@ function discover(){
             </div>
             <h2>Каталог ігор
             </h2>
-            <p class="muted small">Знайди гру за назвою, жанром або платформою.
+            <p class="muted small">Знайди гру за назвою, розробником, видавцем або описом.
             </p>
             </div>
-            <span class="status">${db.games.length} ігор
+            <span class="status" id="catalogCount">${catalogCount()}
             </span>
-            </div>
-            
+            </div>${ready?`
         <div class="toolbar">
             <input
                 class="search"
                 id="gameSearch"
+                type="search"
                 placeholder="⌕ Пошук ігор..."
                 aria-label="Пошук ігор"
+                value="${esc(catalogView.search)}"
             >
 
-            <select class="search" id="genreFilter" aria-label="Фільтр за жанром">
-                <option value="">Усі жанри</option>
-                ${[...new Set(db.games.map(g => g.genre))].map(x => `
-                    <option>${esc(x)}</option>
-                `).join('')}
-            </select>
-
-            <select class="search" id="platformFilter" aria-label="Фільтр за платформою">
-                <option value="">Усі платформи</option>
-                ${[...new Set(db.games.map(g => g.platform))].map(x => `
-                    <option>${esc(x)}</option>
-                `).join('')}
+            <select class="search" id="gameSort" aria-label="Сортування за назвою">
+                <option value="asc" ${catalogView.sort==='asc'?'selected':''}>Назва: А → Я</option>
+                <option value="desc" ${catalogView.sort==='desc'?'selected':''}>Назва: Я → А</option>
             </select>
 
             <button class="btn" id="resetFilters" type="button">
-                Скинути фільтри
+                Скинути
             </button>
-        </div>
+        </div>`:''}
 
-            <div class="grid" id="gameGrid">${db.games.map(gameCard).join('')}
+            <div class="grid" id="gameGrid">${catalogResults()}
             </div>
             </main>`;
     layout(content,
     'discover');
-    $('#gameSearch').addEventListener('input',
-    filterGames);
-    $('#genreFilter').addEventListener('change',
-    filterGames);
-    $('#resetFilters').addEventListener('click', () => {
-    $('#gameSearch').value = '';
-    $('#genreFilter').value = '';
-    $('#platformFilter').value = '';
-
-    filterGames();
-});
+    bindCatalogControls();
+    bindCatalogGrid();
+    if(cs.status==='idle')window.GameNestCatalog.load();
 }
-
-function filterGames() {
-    const searchInput = $('#gameSearch');
-    const genreFilter = $('#genreFilter');
-    const platformFilter = $('#platformFilter');
-
-    const query = searchInput.value
-        .trim()
-        .toLowerCase();
-
-    const genre = genreFilter.value;
-    const platform = platformFilter.value;
-
-    const filteredGames = db.games.filter(game => {
-        const searchableText = [
-            game.title,
-            game.developer,
-            game.publisher,
-            game.genre,
-            game.platform,
-            game.description
-        ]
-            .filter(Boolean)
-            .join(' ')
-            .toLowerCase();
-
-        const matchesSearch = searchableText.includes(query);
-        const matchesGenre = !genre || game.genre === genre;
-        const matchesPlatform = !platform || game.platform === platform;
-
-        return matchesSearch && matchesGenre && matchesPlatform;
+function openApiGame(el){
+    const id=Number(el.dataset.apiGame);
+    if(Number.isInteger(id)&&id>0)apiDetail(id)
+}
+// A broken cover image falls back to the gradient placeholder underneath it.
+function onCoverError(img){
+    img.closest('.poster')?.classList.remove('has-cover');
+    img.remove()
+}
+// Delegated listeners, attached once per #gameGrid element (discover() creates a new one).
+// Search, sort and reset only replace the grid's content, so no listeners pile up.
+function bindCatalogGrid(){
+    const grid=$('#gameGrid');
+    if(!grid)return;
+    grid.addEventListener('click',e=>{
+        const retry=e.target.closest('[data-action="catalog-retry"]');
+        if(retry&&grid.contains(retry)){
+            window.GameNestCatalog.load({force:true});
+            return
+        }
+        const card=e.target.closest('[data-api-game]');
+        if(card&&grid.contains(card))openApiGame(card)
     });
-
-    const gameGrid = $('#gameGrid');
-
-    gameGrid.innerHTML = filteredGames.length
-        ? filteredGames.map(gameCard).join('')
-        : `
-            <div class="empty" style="grid-column:1/-1">
-                <h3>Нічого не знайдено</h3>
-                <p>Спробуй змінити пошуковий запит або фільтри.</p>
-            </div>
-        `;
-
-    bind();
+    // "error" does not bubble, so it is caught in the capture phase.
+    grid.addEventListener('error',e=>{
+        if(e.target instanceof HTMLImageElement&&e.target.matches('img[data-cover]'))onCoverError(e.target)
+    },true)
 }
-
+function bindCatalogControls(){
+    const search=$('#gameSearch'),sort=$('#gameSort'),reset=$('#resetFilters');
+    if(search)search.addEventListener('input',()=>{catalogView.search=search.value;renderCatalogResults()});
+    if(sort)sort.addEventListener('change',()=>{catalogView.sort=sort.value==='desc'?'desc':'asc';renderCatalogResults()});
+    if(reset)reset.addEventListener('click',()=>{
+        catalogView.search='';
+        catalogView.sort='asc';
+        if(search)search.value='';
+        if(sort)sort.value='asc';
+        renderCatalogResults()
+    });
+}
+// Updates only the grid, so the search field keeps focus while typing.
+function renderCatalogResults(){
+    const grid=$('#gameGrid');
+    if(!grid)return;
+    grid.innerHTML=catalogResults()
+}
+// API game detail page: always fetched from GET /api/Games/{id}.
+// Every page function assigns `rerender` when it renders, so a response may only render while `rerender`
+// is still this very call: navigating anywhere else (another page, another or the same API game again,
+// a session re-render) makes it stale.
+function apiDetail(id){
+    const view=()=>apiDetail(id);
+    rerender=view;
+    const isCurrent=()=>rerender===view;
+    const cached=window.GameNestCatalog.cachedById(id);
+    renderApiDetail(id,{status:'loading',game:cached});
+    window.GameNestCatalog.fetchById(id).then(game=>{
+        if(!isCurrent())return;
+        renderApiDetail(id,game?{status:'success',game}:{status:'not-found'})
+    }).catch(error=>{
+        if(!isCurrent())return;
+        renderApiDetail(id,{status:'error',error:window.GameNestApi.describeError(error)})
+    })
+}
+function renderApiDetail(id,view){
+    const back=`
+            <button class="btn" data-go="discover">← Назад до каталогу
+            </button>`;
+    if(view.status==='not-found'||view.status==='error'||(view.status==='loading'&&!view.game)){
+        const body=view.status==='loading'?`
+            <div class="empty" role="status" aria-live="polite" aria-busy="true">
+            <h3>Завантажуємо гру…
+            </h3>
+            </div>`:view.status==='not-found'?`
+            <div class="empty" role="alert">
+            <h3>Гру не знайдено
+            </h3>
+            <p>Можливо, її видалили з каталогу або посилання застаріло.
+            </p>
+            <button class="btn primary" data-go="discover">До каталогу
+            </button>
+            </div>`:`
+            <div class="empty" role="alert">
+            <h3>Не вдалося завантажити гру
+            </h3>
+            <p>${esc(view.error||'Спробуй ще раз трохи пізніше.')}
+            </p>
+            <button class="btn primary" data-api-game="${esc(id)}">Спробувати ще раз
+            </button>
+            </div>`;
+        layout(`
+            <main class="container" data-page="game">${back}
+            <div style="margin-top:22px">${body}
+            </div>
+            </main>`,'discover');
+        return
+    }
+    const g=view.game;
+    const facts=[
+        ['Розробник',g.developer],
+        ['Видавець',g.publisher],
+        ['Дата виходу',g.releaseDate?releaseDateFormat.format(g.releaseDate):'']
+    ].filter(([,v])=>v);
+    layout(`
+            <main class="container" data-page="game">${back}
+            <div class="detail-layout" style="margin-top:22px">
+            <section>
+            <div class="detail-poster">${apiPoster(g)}
+            </div>
+            <div class="section-head">
+            <div>${g.releaseYear?`
+            <div class="eyebrow">${esc(g.releaseYear)}
+            </div>`:''}
+            <h1 style="font-size:38px">${esc(g.title)}
+            </h1>
+            <p class="muted">${[g.developer,g.publisher].filter(Boolean).map(esc).join(' · ')}
+            </p>
+            </div>
+            </div>
+            <h3>Про гру
+            </h3>
+            <p style="line-height:1.8;color:#6e655f">${esc(g.description||'Опис цієї гри ще не додано.')}
+            </p>${view.status==='loading'?`
+            <div class="notice" role="status" aria-busy="true">Оновлюємо дані гри…
+            </div>`:''}
+            </section>
+            <aside class="panel">
+            <h3>Про видання
+            </h3>${facts.length?facts.map(([k,v])=>`
+            <div class="field">
+            <label>${esc(k)}
+            </label>
+            <div>${esc(v)}
+            </div>
+            </div>`).join(''):`
+            <p class="muted small">Додаткових відомостей поки немає.
+            </p>`}${g.trailerUrl?`
+            <a class="btn" style="width:100%;margin-top:14px;text-align:center;display:block" href="${esc(g.trailerUrl)}" target="_blank" rel="noopener noreferrer">▶ Дивитися трейлер
+            </a>`:''}
+            <hr class="divider">
+            <h3>Моя бібліотека
+            </h3>
+            <p class="muted small">Додавання ігор із каталогу до бібліотеки з’явиться після синхронізації бібліотеки з сервером GameNest.
+            </p>
+            </aside>
+            </div>
+            </main>`,
+'discover')
+}
 function auth(){
     rerender=()=>auth();
     const st=session.state;
@@ -490,7 +661,7 @@ const content=`
             <p class="muted">Відстежуй ігри за власними статусами. GameNest не рахує відсоток проходження автоматично.
             </p>
             </div>
-            <button class="btn primary" data-go="discover">＋ Знайти гру
+            <button class="btn primary" data-go="discover">Переглянути каталог
             </button>
             </div>
             ${localNotice()}
@@ -512,7 +683,7 @@ const content=`
             <div class="empty" style="grid-column:1/-1">
             <h3>Бібліотека поки порожня
             </h3>
-            <p>Додай першу гру з каталогу та вибери її статус.
+            <p>Бібліотека поки зберігається лише в цьому браузері. Додавання ігор із каталогу GameNest з’явиться після синхронізації бібліотеки з сервером.
             </p>
             <button class="btn primary" data-go="discover">Відкрити каталог
             </button>
@@ -872,7 +1043,7 @@ if(tab==='proposals'){
             </button>`:''}${p.status!=='Відхилено'?`
             <button class="btn danger" data-reject="${p.id}">Відхилити
             </button>`:''}${p.status==='Схвалено'?`
-            <button class="btn" data-publish="${p.id}">Додати в каталог
+            <button class="btn" data-publish="${p.id}">Додати в локальний каталог
             </button>`:''}
             </div>
             </td>
@@ -885,9 +1056,9 @@ else if(tab==='games'){
     body=`
             <div class="section-head">
             <div>
-            <h2>Ігри каталогу
+            <h2>Локальний demo-каталог
             </h2>
-            <p class="muted small">Редагуй список доступних ігор.
+            <p class="muted small">Ці ігри зберігаються лише в цьому браузері й не потрапляють у каталог GameNest на сервері.
             </p>
             </div>
             <button class="btn primary" data-go="addgame">＋ Додати гру
@@ -935,9 +1106,9 @@ else if(tab==='games'){
 else{
     body=`
             <section class="panel">
-            <h2>Додати нову гру до каталогу
+            <h2>Додати гру до локального demo-каталогу
             </h2>
-            <p class="muted small">Після збереження гра одразу з’явиться в каталозі для всіх користувачів.
+            <p class="muted small">Гра збережеться лише в цьому браузері. У каталог GameNest на сервері вона не потрапить.
             </p>${gameForm()}
             </section>`
 }
@@ -952,7 +1123,7 @@ layout(`
             ${localNotice()}
             <div class="stat-grid" style="margin:24px 0">
             <div class="stat">
-            <span class="muted small">Ігор у каталозі
+            <span class="muted small">Ігор у локальному каталозі
             </span>
             <strong>${db.games.length}
             </strong>
@@ -973,7 +1144,7 @@ layout(`
             <div class="admin-tabs">
             <button class="chip ${tab==='proposals'?'active':''}" data-admintab="proposals">Пропозиції (${pending})
             </button>
-            <button class="chip ${tab==='games'?'active':''}" data-admintab="games">Каталог ігор
+            <button class="chip ${tab==='games'?'active':''}" data-admintab="games">Локальний каталог
             </button>
             <button class="chip ${tab==='add'?'active':''}" data-admintab="add">＋ Додати гру
             </button>
@@ -1062,7 +1233,7 @@ function bindGameForm(){
         const d=new FormData(f);
         const title=d.get('title').trim();
         if(db.games.some(g=>g.title.toLowerCase()===title.toLowerCase())){
-            toast('Гра з такою назвою вже є в каталозі.');
+            toast('Гра з такою назвою вже є в локальному каталозі.');
             return
         }
     db.games.unshift({
@@ -1078,7 +1249,7 @@ function bindGameForm(){
     }
 );
 save();
-toast('Гру додано до каталогу!');
+toast('Гру додано до локального demo-каталогу.');
 adminPage('games')
 }
 )
@@ -1093,7 +1264,7 @@ function detail(id){
 const st=library()[id];
 layout(`
             <main class="container">
-            <button class="btn" data-go="discover">← Назад до каталогу
+            <button class="btn" data-go="library">← До бібліотеки
             </button>
             <div class="detail-layout" style="margin-top:22px">
             <section>
@@ -1115,6 +1286,8 @@ layout(`
             </h3>
             <p style="line-height:1.8;color:#6e655f">${esc(g.description||'Опис цієї гри ще не додано.')}
             </p>
+            <div class="notice">Це локальна demo-гра з цього браузера, її немає в каталозі GameNest на сервері.
+            </div>
             <div class="notice">Статус гри змінюється вручну. GameNest не відстежує автоматично прогрес або відсоток проходження.
             </div>
             </section>
@@ -1212,6 +1385,7 @@ arg){
     else if(page==='addgame')adminPage('add');
     else if(page==='settings')settings();
     else if(page==='detail')detail(arg)
+    else if(page==='game')apiDetail(arg)
 }
 function bind(){
     $$('[data-go]').forEach(b=>b.addEventListener('click',
@@ -1231,6 +1405,12 @@ $$('[data-action="retry-profile"]').forEach(b=>b.addEventListener('click',
 ()=>session.reloadProfile()));
 $$('[data-game]').forEach(b=>b.addEventListener('click',
 ()=>detail(b.dataset.game)));
+// API catalog games (numeric ids) — never resolved through the local gameById().
+// Elements inside #gameGrid are handled by bindCatalogGrid() (delegation), not here.
+$$('[data-api-game]').filter(b=>!b.closest('#gameGrid')).forEach(b=>b.addEventListener('click',
+()=>openApiGame(b)));
+$$('img[data-cover]').filter(img=>!img.closest('#gameGrid')).forEach(img=>img.addEventListener('error',
+()=>onCoverError(img),{once:true}));
 $$('[data-add]').forEach(b=>b.addEventListener('click',
 ()=>{
     if(!me()){
@@ -1290,7 +1470,7 @@ $$('[data-publish]').forEach(b=>b.addEventListener('click',
     const p=db.proposals.find(p=>p.id===b.dataset.publish);
     if(!p)return;
     if(db.games.some(g=>g.title.toLowerCase()===p.title.toLowerCase())){
-        toast('Така гра вже є в каталозі.');
+        toast('Така гра вже є в локальному каталозі.');
         return
     }
 db.games.unshift({
@@ -1307,7 +1487,7 @@ db.games.unshift({
 );
 p.published=true;
 save();
-toast('Гру додано до каталогу.');
+toast('Гру додано до локального demo-каталогу.');
 adminPage('games')
 }
 ));
@@ -1334,6 +1514,10 @@ session.subscribe(st=>{
     if(lastStatus==='authenticated'&&st.status==='anonymous'&&st.error)toast(st.error);
     lastStatus=st.status;
     rerender()
+});
+// The catalog loads asynchronously; refresh the catalog page (only) when its state changes.
+window.GameNestCatalog.subscribe(()=>{
+    if($('main[data-page="discover"]'))discover()
 });
 discover();
 if(session.hasToken())session.restore();
