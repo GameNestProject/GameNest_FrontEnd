@@ -410,6 +410,20 @@ h3 {
     opacity: .8;
 }
 
+/* Cover image from the API catalog: sits under the dark gradient (:before) and the title. */
+.poster .poster-cover {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    z-index: 0;
+}
+
+.poster.has-cover:after {
+    display: none;
+}
+
 .poster .poster-title {
     position: relative;
     z-index: 2;
