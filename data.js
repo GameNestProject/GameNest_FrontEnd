@@ -18,7 +18,9 @@ window.GameNestData = {
             platform: 'PC',
             year: 2025,
             description: 'Атмосферна пригода у світі, де старі ліси зберігають забуті історії.',
-            poster: 'p6'
+            poster: 'p6',
+            rating: null,
+            image: 'assets/games/whispers-of-lumen.jpg',
         },
         {
             id: 'g2',

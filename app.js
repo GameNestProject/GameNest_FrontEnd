@@ -68,6 +68,16 @@ function loadDatabase() {
         const migrated = {
             ...fresh(),
             ...rest,
+            games: (rest.games || []).map(game => {
+    const seed = seedGames.find(item => item.id === game.id);
+
+    return {
+        ...seed,
+        ...game,
+        image: game.image || seed?.image || '',
+        rating: game.rating ?? seed?.rating ?? null
+    };
+}),
             libraries: rest.libraries || {},
             proposals: Array.isArray(rest.proposals)
                 ? rest.proposals
@@ -191,19 +201,38 @@ active){
             </div>`;
     bind()
 }
-function poster(g){
+
+function poster(g) {
+    if (g.image) {
+        return `
+            <div
+                class="poster game-image"
+                style="background-image: url('${esc(g.image)}')"
+                role="img"
+                aria-label="Обкладинка гри ${esc(g.title)}"
+            ></div>
+        `;
+    }
+
     return `
-            <div class="poster ${esc(g.poster||'p1')}">
-            <span class="poster-title">${esc(g.title)}
-            </span>
-            </div>`
+        <div class="poster ${esc(g.poster || 'p1')}">
+            <span class="poster-title">${esc(g.title)}</span>
+        </div>
+    `;
 }
+
 
 function gameCard(g) {
     const st = library()[g.id];
 
     return `
-        <article class="game-card" aria-label="Гра ${esc(g.title)}">
+        <article
+            class="game-card"
+            data-preview="${esc(g.id)}"
+            tabindex="0"
+            role="button"
+            aria-label="Переглянути гру ${esc(g.title)}"
+        >
             ${poster(g)}
 
             <div class="card-body">
@@ -216,10 +245,7 @@ function gameCard(g) {
                     </div>
 
                     ${st ? `
-                        <span
-                            class="status ${statusClass(st)}"
-                            aria-label="Статус гри: ${esc(st)}"
-                        >
+                        <span class="status ${statusClass(st)}">
                             ${esc(st)}
                         </span>
                     ` : ''}
@@ -234,18 +260,20 @@ function gameCard(g) {
 
                 <div class="card-bottom">
                     <button
-                        class="btn"
+                        class="info-btn"
+                        type="button"
                         data-game="${esc(g.id)}"
-                        aria-label="Детальніше про гру ${esc(g.title)}"
+                        title="Детальна інформація"
+                        aria-label="Детальна інформація про ${esc(g.title)}"
                     >
-                        Детальніше
+                        i
                     </button>
 
                     ${st ? `
                         <button
                             class="icon-btn"
                             title="Змінити статус"
-                            aria-label="Змінити статус гри ${esc(g.title)}"
+                            aria-label="Змінити статус"
                             data-status="${esc(g.id)}"
                         >
                             ↻
@@ -254,7 +282,7 @@ function gameCard(g) {
                         <button
                             class="icon-btn"
                             title="Додати до бібліотеки"
-                            aria-label="Додати гру ${esc(g.title)} до бібліотеки"
+                            aria-label="Додати до бібліотеки"
                             data-add="${esc(g.id)}"
                         >
                             ＋
@@ -1510,6 +1538,104 @@ adminPage('games')
 }
 )
 }
+
+function previewGame(id) {
+    const g = gameById(id);
+    if (!g) return;
+
+    const image = g.image || g.cover || g.imageUrl;
+
+    const modal = document.createElement('div');
+    modal.className = 'game-preview-backdrop';
+
+    modal.innerHTML = `
+        <section class="game-preview"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="gamePreviewTitle">
+
+            <button
+                class="game-preview-close"
+                type="button"
+                aria-label="Закрити вікно">
+                ×
+            </button>
+
+            <div class="game-preview-art ${esc(g.poster || 'p1')}"
+                ${image ? `style="background-image:url('${esc(image)}')"` : ''}>
+                ${image ? '' : `<span>${esc(g.title)}</span>`}
+            </div>
+
+            <div class="game-preview-content">
+                <div class="eyebrow">
+                    ${esc(g.genre)} · ${esc(g.platform)} · ${esc(g.year)}
+                </div>
+
+                <h2 id="gamePreviewTitle">${esc(g.title)}</h2>
+
+                <p>
+                    ${esc(g.description || 'Опис цієї гри ще не додано.')}
+                </p>
+            </div>
+        </section>
+    `;
+
+    document.body.appendChild(modal);
+
+    const close = () => {
+        modal.remove();
+        document.removeEventListener('keydown', onKeydown);
+    };
+
+    const onKeydown = event => {
+        if (event.key === 'Escape') close();
+    };
+
+    modal.addEventListener('click', event => {
+        if (
+            event.target === modal ||
+            event.target.closest('.game-preview-close')
+        ) {
+            close();
+        }
+    });
+
+    document.addEventListener('keydown', onKeydown);
+}
+
+function ratingView(rating) {
+    const value = Number(rating);
+
+    if (
+        rating === null ||
+        rating === undefined ||
+        rating === '' ||
+        !Number.isFinite(value) ||
+        value < 0 ||
+        value > 5
+    ) {
+        return `
+            <div class="game-rating">
+                <span class="rating-empty">Рейтинг ще не додано</span>
+            </div>
+        `;
+    }
+
+    const rounded = Math.round(value * 2) / 2;
+
+    return `
+        <div class="game-rating" aria-label="Рейтинг ${rounded} з 5">
+            <div class="rating-stars">
+                ${[1, 2, 3, 4, 5].map(i => `
+                    <span class="${i <= Math.floor(rounded) ? 'filled' : ''}">★</span>
+                `).join('')}
+            </div>
+            <strong>${rounded.toFixed(1)}</strong>
+            <span class="rating-scale">/ 5</span>
+        </div>
+    `;
+}
+
 function detail(id){
     rerender=()=>detail(id);
     const g=gameById(id);
@@ -1534,6 +1660,7 @@ layout(`
             </h1>
             <p class="muted">${esc(g.developer)}${g.publisher?' · '+esc(g.publisher):''}
             </p>
+            ${ratingView(g.rating)}
             </div>${st?`
             <span class="status ${statusClass(st)}">${esc(st)}
             </span>`:''}
