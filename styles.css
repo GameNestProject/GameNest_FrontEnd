@@ -751,6 +751,61 @@ tr:last-child td {
     margin: 20px 0;
 }
 
+/* Local demo tools are visually secondary to the real (API) admin tabs. */
+.admin-tabs.demo-tabs {
+    align-items: center;
+    margin-top: -8px;
+    padding-top: 10px;
+    border-top: 1px dashed var(--line);
+}
+
+/* Game submissions and moderation */
+.field-error {
+    min-height: 0;
+    color: #a2412f;
+    margin-top: 4px;
+}
+
+.field.invalid input,
+.field.invalid textarea {
+    border-color: #c4553f;
+}
+
+.form-status {
+    color: #6e5c4f;
+}
+
+.submission-list {
+    display: grid;
+    gap: 10px;
+}
+
+.submission-item {
+    display: grid;
+    gap: 10px;
+}
+
+.submission-item h3 {
+    margin: 0 0 4px;
+    overflow-wrap: anywhere;
+}
+
+.submission-item p {
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+.submission-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.submission-item > .btn {
+    justify-self: start;
+}
+
 .footer {
     padding: 20px 5vw;
     border-top: 1px solid var(--line);

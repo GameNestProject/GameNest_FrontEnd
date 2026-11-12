@@ -333,8 +333,10 @@ function catalogResults(){
             <div class="empty" style="grid-column:1/-1">
             <h3>Каталог поки порожній
             </h3>
-            <p>Ігри з’являться тут, щойно адміністратор додасть їх до каталогу GameNest.
+            <p>Ігри з’являться тут, щойно адміністратор додасть їх до каталогу GameNest. Знаєш гру, якої тут бракує?
             </p>
+            <button class="btn primary" data-go="submit">Запропонувати гру
+            </button>
             </div>`;
     const games=window.GameNestCatalog.query(cs.games,catalogView);
     return games.length?games.map(apiGameCard).join(''):`
@@ -387,8 +389,12 @@ function discover(){
             <p class="muted small">Знайди гру за назвою, розробником, видавцем або описом.
             </p>
             </div>
+            <div class="row-actions">
             <span class="status" id="catalogCount">${catalogCount()}
             </span>
+            <button class="btn primary" data-go="submit">＋ Запропонувати гру
+            </button>
+            </div>
             </div>${ready?`
         <div class="toolbar">
             <input
@@ -568,11 +574,464 @@ function renderApiDetail(id,view){
             </main>`,
 'discover')
 }
+// ---------- Game submissions and moderation (API: GameNestSubmissions) ----------
+// Every page assigns `rerender`; a response may only render while its page is still the current one.
+function beginView(view){
+    rerender=view;
+    return ()=>rerender===view
+}
+const dateTimeFormat=new Intl.DateTimeFormat('uk-UA',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+const fmtDateTime=d=>d?dateTimeFormat.format(d):'—';
+const fmtDate=d=>d?releaseDateFormat.format(d):'';
+// Page to open after signing in (e.g. the submission form).
+let afterSignIn=null;
+// Returns the signed-in user, or renders the right state (checking the session / sign-in prompt) and returns null.
+function requireSignedIn(route,message){
+    const u=me();
+    if(u)return u;
+    if(session.state.status==='loading'){
+        layout(`
+            <main class="container">
+            <div class="empty" role="status" aria-busy="true">
+            <h3>Перевіряємо вхід…
+            </h3>
+            </div>
+            </main>`,'');
+        return null
+    }
+    afterSignIn=route;
+    toast(message||'Увійди, щоб продовжити.');
+    auth();
+    return null
+}
+function submissionStatus(s){
+    return `<span class="status ${esc(s.statusCss)}">${esc(s.statusLabel)}</span>`
+}
+function loadingBlock(text){
+    return `
+            <div class="empty" role="status" aria-live="polite" aria-busy="true">
+            <h3>${esc(text)}
+            </h3>
+            </div>`
+}
+function errorBlock(title,error,retryAction){
+    return `
+            <div class="empty" role="alert">
+            <h3>${esc(title)}
+            </h3>
+            <p>${esc(error||'Спробуй ще раз трохи пізніше.')}
+            </p>${retryAction?`
+            <button class="btn primary" data-action="${esc(retryAction)}">Спробувати ще раз
+            </button>`:''}
+            </div>`
+}
+// Shared form for proposing a game and for adding one directly (admin). Only fields the backend supports.
+function gameFieldsForm(id,submitLabel){
+    const L=window.GameNestSubmissions.LIMITS;
+    const field=(name,label,input,wide)=>`
+            <div class="field${wide?' wide':''}" data-field="${name}">
+            <label for="${id}-${name}">${label}
+            </label>${input}
+            <div class="field-error small" id="${id}-${name}-error" aria-live="polite">
+            </div>
+            </div>`;
+    return `
+            <form id="${id}" class="form-grid" novalidate>${field('title','Назва гри *',`
+            <input id="${id}-title" name="title" required maxlength="${L.title}" autocomplete="off" placeholder="Наприклад, Hollow Knight: Silksong">`)}${field('releaseDate','Дата виходу',`
+            <input id="${id}-releaseDate" name="releaseDate" type="date" min="${L.minYear}-01-01">`)}${field('developer','Розробник',`
+            <input id="${id}-developer" name="developer" maxlength="${L.name}" autocomplete="off">`)}${field('publisher','Видавець',`
+            <input id="${id}-publisher" name="publisher" maxlength="${L.name}" autocomplete="off">`)}${field('coverUrl','Обкладинка (URL)',`
+            <input id="${id}-coverUrl" name="coverUrl" type="url" inputmode="url" maxlength="${L.url}" placeholder="https://…">`)}${field('trailerUrl','Трейлер (URL)',`
+            <input id="${id}-trailerUrl" name="trailerUrl" type="url" inputmode="url" maxlength="${L.url}" placeholder="https://…">`)}${field('description','Опис',`
+            <textarea id="${id}-description" name="description" rows="5" maxlength="${L.description}"></textarea>`,true)}
+            <div class="wide form-status small" id="${id}-status" role="status" aria-live="polite">
+            </div>
+            <div class="wide">
+            <button class="btn primary" type="submit" id="${id}-submit">${esc(submitLabel)}
+            </button>
+            </div>
+            </form>`
+}
+// Validation, busy state (no double submissions) and server errors for a gameFieldsForm.
+// The request is never cancelled (the server may already be processing it). When it settles:
+//   afterSuccess(result) — data effects (e.g. catalog refresh), always;
+//   successMessage / failureMessage — a short toast, always (it does not change the page);
+//   onSuccess(result,values) and error details in the form — only if this form is still on screen, so a late
+//   response cannot change or navigate away from a page the user has opened since.
+function bindGameFieldsForm(form,{submitLabel,busyLabel,send,successMessage,failureMessage,afterSuccess,onSuccess}){
+    const S=window.GameNestSubmissions;
+    const button=form.querySelector('[type="submit"]');
+    const status=form.querySelector('.form-status');
+    let busy=false;
+    const showErrors=errors=>{
+        form.querySelectorAll('[data-field]').forEach(el=>{
+            const msg=errors[el.dataset.field]||'';
+            el.classList.toggle('invalid',!!msg);
+            el.querySelector('.field-error').textContent=msg;
+            el.querySelector('input,textarea')?.setAttribute('aria-invalid',msg?'true':'false')
+        })
+    };
+    form.addEventListener('submit',async e=>{
+        e.preventDefault();
+        if(busy)return;
+        const values=S.readForm(form);
+        const errors=S.validate(values);
+        showErrors(errors);
+        status.textContent='';
+        const first=Object.keys(errors)[0];
+        if(first){
+            form.querySelector(`[name="${first}"]`)?.focus();
+            return
+        }
+        busy=true;
+        button.disabled=true;
+        button.textContent=busyLabel;
+        form.setAttribute('aria-busy','true');
+        let result;
+        try{
+            result=await send(values)
+        }catch(error){
+            const message=window.GameNestApi.describeError(error);
+            if(!form.isConnected){
+                toast(failureMessage?`${failureMessage}: ${message}`:message);
+                return
+            }
+            showErrors(S.fieldErrors(error));
+            status.textContent=message;
+            toast(message);
+            return
+        }finally{
+            busy=false;
+            if(form.isConnected){
+                button.disabled=false;
+                button.textContent=submitLabel;
+                form.removeAttribute('aria-busy')
+            }
+        }
+        // The request has succeeded; a failing data effect (sync throw or rejected promise) must not hide that
+        // from the user or stop onSuccess — it is only logged (the catalog shows its own error state).
+        try{
+            const pending=afterSuccess?.(result);
+            if(pending&&typeof pending.then==='function')pending.then(undefined,error=>console.warn('afterSuccess failed:',error));
+        }catch(error){
+            console.warn('afterSuccess failed:',error)
+        }
+        if(successMessage)toast(successMessage);
+        if(form.isConnected)onSuccess?.(result,values)
+    })
+}
+// User: propose a game.
+function submitGame(){
+    beginView(()=>submitGame());
+    const u=requireSignedIn('submit','Увійди, щоб запропонувати гру.');
+    if(!u)return;
+    layout(`
+            <main class="container" data-page="submit">
+            <button class="btn" data-go="discover">← До каталогу
+            </button>
+            <div class="section-head" style="margin-top:18px">
+            <div>
+            <div class="eyebrow">Каталог GameNest
+            </div>
+            <h1 style="font-size:36px">Запропонувати гру
+            </h1>
+            <p class="muted">Не знайшов гру в каталозі? Заповни форму — адміністратор розгляне пропозицію, і після схвалення гра з’явиться в каталозі.
+            </p>
+            </div>
+            <button class="btn" data-go="submissions">Мої пропозиції
+            </button>
+            </div>
+            <section class="panel">${gameFieldsForm('submissionForm','Надіслати на розгляд')}
+            </section>
+            </main>`,'discover');
+    bindGameFieldsForm($('#submissionForm'),{
+        submitLabel:'Надіслати на розгляд',
+        busyLabel:'Надсилаємо…',
+        send:values=>window.GameNestSubmissions.submit(values),
+        successMessage:'Пропозицію надіслано на розгляд.',
+        failureMessage:'Пропозицію не надіслано',
+        onSuccess:()=>mySubmissions()
+    })
+}
+// User: own submissions (GET /api/Submissions/mine).
+function mySubmissions(){
+    const isCurrent=beginView(()=>mySubmissions());
+    const u=requireSignedIn('submissions','Увійди, щоб переглянути свої пропозиції.');
+    if(!u)return;
+    const render=body=>layout(`
+            <main class="container" data-page="submissions">
+            <div class="section-head">
+            <div>
+            <div class="eyebrow">Каталог GameNest
+            </div>
+            <h1 style="font-size:36px">Мої пропозиції
+            </h1>
+            <p class="muted">Статус змінюється після перевірки адміністратором.
+            </p>
+            </div>
+            <button class="btn primary" data-go="submit">＋ Запропонувати гру
+            </button>
+            </div>${body}
+            </main>`,'profile');
+    render(loadingBlock('Завантажуємо пропозиції…'));
+    window.GameNestSubmissions.mine().then(items=>{
+        if(!isCurrent())return;
+        render(items.length?`
+            <div class="submission-list">${items.map(s=>`
+            <article class="panel submission-item">
+            <div class="submission-head">
+            <div>
+            <h3>${esc(s.title)}
+            </h3>
+            <div class="small muted">Подано ${esc(fmtDateTime(s.createdAt))} · ${esc(s.typeLabel)}
+            </div>
+            </div>${submissionStatus(s)}
+            </div>${s.status==='Rejected'?`
+            <p class="small"><b>Причина відхилення:</b> ${esc(s.adminComment||'не вказано')}
+            </p>`:''}${s.status==='Approved'&&s.gameId?`
+            <button class="btn" data-api-game="${esc(s.gameId)}">Переглянути в каталозі
+            </button>`:''}
+            </article>`).join('')}
+            </div>`:`
+            <div class="empty">
+            <h3>Пропозицій поки немає
+            </h3>
+            <p>Запропонуй гру, якої ще немає в каталозі.
+            </p>
+            <button class="btn primary" data-go="submit">Запропонувати гру
+            </button>
+            </div>`)
+    }).catch(error=>{
+        if(!isCurrent())return;
+        render(errorBlock('Не вдалося завантажити пропозиції',window.GameNestApi.describeError(error),'submissions-retry'))
+    })
+}
+// Admin pages: the role comes from GET /api/Profile; the backend enforces it on every endpoint anyway.
+function requireAdmin(){
+    const u=requireSignedIn('admin','Увійди як адміністратор.');
+    if(!u)return null;
+    if(!u.isAdmin){
+        toast('Цей розділ доступний лише адміністратору.');
+        go('discover');
+        return null
+    }
+    return u
+}
+// Admin tab bar: real moderation (API) separated from the local demo tools.
+function adminTabs(tab){
+    const chip=(key,label)=>`<button class="chip ${tab===key?'active':''}" data-admintab="${key}">${label}</button>`;
+    return `
+            <div class="admin-tabs" aria-label="Каталог GameNest">${chip('moderation','Модерація пропозицій')}${chip('create','＋ Додати гру в каталог')}
+            </div>
+            <div class="admin-tabs demo-tabs" aria-label="Демо: лише цей браузер">
+            <span class="small muted">Демо (лише цей браузер):
+            </span>${chip('proposals','Локальні пропозиції')}${chip('games','Локальний каталог')}${chip('add','＋ Локальна гра')}
+            </div>`
+}
+function adminShell(tab,body){
+    layout(`
+            <main class="container" data-page="admin-${esc(tab)}">
+            <div class="eyebrow">Панель керування
+            </div>
+            <h1 style="font-size:36px">Адміністрування GameNest
+            </h1>
+            <p class="muted">Модеруй пропозиції користувачів і додавай ігри до каталогу GameNest. Зміни одразу потрапляють на сервер.
+            </p>${adminTabs(tab)}${body}
+            </main>`,'admin')
+}
+const MODERATION_FILTERS=[['Pending','На розгляді'],['Approved','Схвалені'],['Rejected','Відхилені'],['','Усі']];
+let moderationFilter='Pending';
+// Admin: moderation queue (GET /api/Submissions?status=…).
+function adminModeration(){
+    const isCurrent=beginView(()=>adminModeration());
+    if(!requireAdmin())return;
+    const filter=moderationFilter;
+    const render=body=>adminShell('moderation',`
+            <div class="toolbar filters" style="margin-top:18px">${MODERATION_FILTERS.map(([v,l])=>`
+            <button class="chip ${v===filter?'active':''}" data-modfilter="${v}">${l}
+            </button>`).join('')}
+            </div>${body}`);
+    render(loadingBlock('Завантажуємо пропозиції…'));
+    window.GameNestSubmissions.adminList(filter).then(items=>{
+        if(!isCurrent())return;
+        render(items.length?`
+            <div class="submission-list">${items.map(s=>`
+            <article class="panel submission-item">
+            <div class="submission-head">
+            <div>
+            <h3>${esc(s.title)}
+            </h3>
+            <div class="small muted">${esc(s.submittedBy||'Користувач #'+s.submittedByUserId)} · ${esc(fmtDateTime(s.createdAt))} · ${esc(s.typeLabel)}
+            </div>
+            </div>${submissionStatus(s)}
+            </div>
+            <button class="btn" data-submission="${esc(s.id)}">${s.status==='Pending'?'Розглянути':'Переглянути'}
+            </button>
+            </article>`).join('')}
+            </div>`:`
+            <div class="empty">
+            <h3>${filter==='Pending'?'Немає пропозицій на розгляді':'Пропозицій не знайдено'}
+            </h3>
+            </div>`)
+    }).catch(error=>{
+        if(!isCurrent())return;
+        render(errorBlock('Не вдалося завантажити пропозиції',window.GameNestApi.describeError(error),'moderation-retry'))
+    })
+}
+// Admin: one submission with all submitted data, approve / reject.
+function adminSubmission(id){
+    const isCurrent=beginView(()=>adminSubmission(id));
+    if(!requireAdmin())return;
+    const back=`
+            <button class="btn" data-admintab="moderation">← До черги модерації
+            </button>`;
+    const render=body=>adminShell('moderation',`
+            <div style="margin-top:18px">${back}
+            </div>${body}`);
+    render(loadingBlock('Завантажуємо пропозицію…'));
+    window.GameNestSubmissions.get(id).then(s=>{
+        if(!isCurrent())return;
+        if(!s){
+            render(errorBlock('Не вдалося прочитати пропозицію','Сервер повернув некоректні дані.'));
+            return
+        }
+        renderAdminSubmission(s,render,isCurrent)
+    }).catch(error=>{
+        if(!isCurrent())return;
+        if(error.status===404){
+            render(errorBlock('Пропозицію не знайдено','Можливо, її видалив автор.'));
+            return
+        }
+        render(errorBlock('Не вдалося завантажити пропозицію',window.GameNestApi.describeError(error),'submission-retry'))
+    })
+}
+function renderAdminSubmission(s,render,isCurrent){
+    const cs=window.GameNestCatalog.state;
+    const sameTitle=cs.status==='success'&&cs.games.some(g=>g.title.toLocaleLowerCase('uk')===s.title.toLocaleLowerCase('uk'));
+    const urlRow=(label,safe,raw)=>raw?`
+            <div class="field">
+            <label>${label}
+            </label>
+            <div>${safe?`<a href="${esc(safe)}" target="_blank" rel="noopener noreferrer">${esc(safe)}</a>`:`<span class="muted">некоректна адреса, не показано</span>`}
+            </div>
+            </div>`:'';
+    const facts=[['Розробник',s.developer],['Видавець',s.publisher],['Дата виходу',fmtDate(s.releaseDate)],['Автор',s.submittedBy||'Користувач #'+s.submittedByUserId],['Подано',fmtDateTime(s.createdAt)],['Тип',s.typeLabel]].filter(([,v])=>v);
+    render(`
+            <div class="detail-layout" style="margin-top:18px">
+            <section>
+            <div class="detail-poster">${apiPoster({id:s.id,title:s.title,coverUrl:s.coverUrl})}
+            </div>
+            <div class="section-head">
+            <div>
+            <h2 style="font-size:30px">${esc(s.title)}
+            </h2>
+            </div>${submissionStatus(s)}
+            </div>${sameTitle&&s.status==='Pending'?`
+            <div class="notice" role="note">У каталозі вже є гра з такою назвою. Схвалення додасть ще одну гру (версію) з цією назвою.
+            </div>`:''}
+            <h3>Опис
+            </h3>
+            <p style="line-height:1.8;color:#6e655f;white-space:pre-line">${esc(s.description||'Опис не вказано.')}
+            </p>
+            </section>
+            <aside class="panel">${facts.map(([k,v])=>`
+            <div class="field">
+            <label>${esc(k)}
+            </label>
+            <div>${esc(v)}
+            </div>
+            </div>`).join('')}${urlRow('Обкладинка',s.coverUrl,s.rawCoverUrl)}${urlRow('Трейлер',s.trailerUrl,s.rawTrailerUrl)}
+            <hr class="divider">${s.status==='Pending'?`
+            <div class="field">
+            <label for="rejectReason">Причина відхилення (необов’язково)
+            </label>
+            <textarea id="rejectReason" rows="3" maxlength="${window.GameNestSubmissions.LIMITS.reason}" placeholder="Її побачить автор пропозиції"></textarea>
+            </div>
+            <div class="row-actions" style="margin-top:12px">
+            <button class="btn primary" id="approveSubmission">Схвалити й додати в каталог
+            </button>
+            <button class="btn danger" id="rejectSubmission">Відхилити
+            </button>
+            </div>
+            <div class="form-status small" id="moderationStatus" role="status" aria-live="polite">
+            </div>`:`
+            <p class="small muted">Розглянуто ${esc(fmtDateTime(s.reviewedAt))}.
+            </p>${s.status==='Rejected'?`
+            <p class="small"><b>Причина:</b> ${esc(s.adminComment||'не вказано')}
+            </p>`:''}${s.status==='Approved'&&s.gameId?`
+            <button class="btn" data-api-game="${esc(s.gameId)}">Переглянути гру в каталозі
+            </button>`:''}`}
+            </aside>
+            </div>`);
+    if(s.status!=='Pending')return;
+    const approveBtn=$('#approveSubmission'),rejectBtn=$('#rejectSubmission'),status=$('#moderationStatus');
+    const act=async(kind)=>{
+        if(approveBtn.disabled)return;
+        approveBtn.disabled=rejectBtn.disabled=true;
+        status.textContent=kind==='approve'?'Схвалюємо…':'Відхиляємо…';
+        try{
+            const updated=kind==='approve'
+                ?await window.GameNestSubmissions.approve(s.id)
+                :await window.GameNestSubmissions.reject(s.id,$('#rejectReason')?.value);
+            if(kind==='approve')window.GameNestCatalog.load({force:true});
+            toast(kind==='approve'?'Пропозицію схвалено, гру додано до каталогу.':'Пропозицію відхилено.');
+            if(isCurrent()&&updated)renderAdminSubmission(updated,render,isCurrent)
+        }catch(error){
+            if(!isCurrent())return;
+            if(error.status===409&&error.code==='submission_already_reviewed'){
+                toast('Цю пропозицію вже розглянули.');
+                adminSubmission(s.id);
+                return
+            }
+            status.textContent=window.GameNestApi.describeError(error);
+            approveBtn.disabled=rejectBtn.disabled=false
+        }
+    };
+    approveBtn.addEventListener('click',()=>act('approve'));
+    rejectBtn.addEventListener('click',()=>act('reject'))
+}
+// Admin: add a game to the public catalog directly (POST /api/Games), no submission involved.
+function adminCreateGame(){
+    beginView(()=>adminCreateGame());
+    if(!requireAdmin())return;
+    adminShell('create',`
+            <section class="panel" style="margin-top:18px">
+            <h2>Додати гру до каталогу GameNest
+            </h2>
+            <p class="muted small">Гра одразу з’явиться в публічному каталозі — без пропозиції та модерації.
+            </p>${gameFieldsForm('adminGameForm','Додати до каталогу')}
+            <div id="createdGame">
+            </div>
+            </section>`);
+    const form=$('#adminGameForm');
+    bindGameFieldsForm(form,{
+        submitLabel:'Додати до каталогу',
+        busyLabel:'Додаємо…',
+        send:values=>window.GameNestSubmissions.createGame(values),
+        successMessage:'Гру додано до каталогу.',
+        failureMessage:'Гру не додано',
+        afterSuccess:()=>window.GameNestCatalog.load({force:true}),
+        onSuccess:game=>{
+            form.reset();
+            const created=$('#createdGame');
+            if(created&&game&&Number.isInteger(game.id)){
+                created.innerHTML=`
+            <div class="notice" role="status">Додано: <b>${esc(game.title)}</b>
+            <button class="btn" data-api-game="${esc(game.id)}" style="margin-left:8px">Відкрити в каталозі
+            </button>
+            </div>`;
+                created.querySelector('[data-api-game]').addEventListener('click',e=>openApiGame(e.currentTarget))
+            }
+        }
+    })
+}
 function auth(){
     rerender=()=>auth();
     const st=session.state;
     if(me()){
-        go('discover');
+        const next=afterSignIn||'discover';
+        afterSignIn=null;
+        go(next);
         return
     }
     const configured=!!window.GameNestConfig.googleClientId;
@@ -625,7 +1084,9 @@ async function onGoogleCredential(credential){
         const {user,isNewUser}=await session.signInWithGoogle(credential);
         if(user){
             toast(isNewUser?`Акаунт створено. Вітаємо, ${user.username}!`:`Вхід виконано. Привіт, ${user.username}!`);
-            go('discover')
+            const next=afterSignIn||'discover';
+            afterSignIn=null;
+            go(next)
         }
     }catch{
         // The error is already in the session state and shown on the auth page.
@@ -691,104 +1152,18 @@ const content=`
             </div>
             <div class="section-head">
             <div>
-            <h2>Запропонувати нову гру
+            <h2>Пропозиції ігор
             </h2>
-            <p class="muted small">Не знайшов гру? Надішли її адміністратору на розгляд.
+            <p class="muted small">Не знайшов гру в каталозі? Запропонуй її — адміністратор розгляне пропозицію.
             </p>
             </div>
             </div>
-            <section class="panel">
-            <form id="proposalForm" class="form-grid">
-            <div class="field">
-            <label>Назва гри *
-            </label>
-            <input name="title" required placeholder="Наприклад, Hollow Knight: Silksong">
-            </div>
-            <div class="field">
-            <label>Платформа *
-            </label>
-            <select name="platform" required>
-            <option value="">Обери платформу
-            </option>
-            <option>PC
-            </option>
-            <option>PlayStation
-            </option>
-            <option>Xbox
-            </option>
-            <option>Nintendo Switch
-            </option>
-            <option>Mobile
-            </option>
-            <option>Інша
-            </option>
-            </select>
-            </div>
-            <div class="field">
-            <label>Жанр *
-            </label>
-            <select name="genre" required>
-            <option value="">Обери жанр
-            </option>${['RPG','Action','Пригоди','Horror','Survival','Симулятор','Strategy','Indie','Інший'].map(x=>`
-            <option>${x}
-            </option>`).join('')}
-            </select>
-            </div>
-            <div class="field wide">
-            <label>Посилання або короткий опис
-            </label>
-            <input name="description" placeholder="Посилання на сторінку гри або опис">
-            </div>
-            <div class="wide">
-            <button class="btn primary">Надіслати пропозицію
+            <section class="panel row-actions">
+            <button class="btn primary" data-go="submit">＋ Запропонувати гру
             </button>
-            </div>
-            </form>
+            <button class="btn" data-go="submissions">Мої пропозиції
+            </button>
             </section>
-            <div class="section-head">
-            <div>
-            <h2>Мої пропозиції
-            </h2>
-            <p class="muted small">Статус змінюється після перевірки адміністратором.
-            </p>
-            </div>
-            </div>
-            <div class="table-wrap">
-            <table>
-            <thead>
-            <tr>
-            <th>Назва гри
-            </th>
-            <th>Платформа · Жанр
-            </th>
-            <th>Дата
-            </th>
-            <th>Статус
-            </th>
-            </tr>
-            </thead>
-            <tbody>${db.proposals.filter(p=>p.userId===u.id).map(p=>`
-            <tr>
-            <td>
-            <b>${esc(p.title)}
-            </b>
-            </td>
-            <td>${esc(p.platform)} · ${esc(p.genre)}
-            </td>
-            <td>${esc(p.createdAt)}
-            </td>
-            <td>
-            <span class="status ${p.status==='Схвалено'?'approved':p.status==='Відхилено'?'rejected':'pending'}">${esc(p.status)}
-            </span>
-            </td>
-            </tr>`).join('')||`
-            <tr>
-            <td colspan="4" class="muted">Ти ще не надсилав пропозицій.
-            </td>
-            </tr>`}
-            </tbody>
-            </table>
-            </div>
             </main>`;
 layout(content,
 'library');
@@ -804,28 +1179,6 @@ $$('[data-libfilter]').forEach(b=>b.addEventListener('click',
     bind()
 }
 ));
-$('#proposalForm').addEventListener('submit',
-e=>{
-    e.preventDefault();
-    const f=new FormData(e.target);
-    db.proposals.unshift({
-        id:'p'+Date.now(),
-        userId:u.id,
-        userName:u.username,
-        title:f.get('title').trim(),
-        platform:f.get('platform'),
-        genre:f.get('genre'),
-        description:f.get('description').trim(),
-        status:'На розгляді',
-        createdAt:new Date().toISOString().slice(0,
-        10)
-    }
-);
-save();
-toast('Пропозицію надіслано адміністратору.');
-libraryPage()
-}
-)
 }
 function profile(){
     rerender=()=>profile();
@@ -834,7 +1187,6 @@ function profile(){
         auth();
         return
     }
-const myprops=db.proposals.filter(p=>p.userId===u.id);
 layout(`
             <main class="container">
             <div class="eyebrow">Особистий простір
@@ -859,7 +1211,7 @@ layout(`
             <nav class="side-nav">
             <button data-go="library">▣ Моя бібліотека
             </button>
-            <button data-go="library">☆ Мої пропозиції
+            <button data-go="submissions">☆ Мої пропозиції
             </button>
             <button data-go="settings">⚙ Налаштування профілю
             </button>
@@ -875,119 +1227,27 @@ layout(`
             <strong>${Object.keys(library()).length}
             </strong>
             </div>
-            <div class="stat">
-            <span class="muted small">Пропозиції
-            </span>
-            <strong>${myprops.length}
-            </strong>
-            </div>
-            <div class="stat">
-            <span class="muted small">На розгляді
-            </span>
-            <strong>${myprops.filter(p=>p.status==='На розгляді').length}
-            </strong>
-            </div>
             </div>
             <div class="section-head">
             <div>
-            <h2>Запропонувати гру
+            <h2>Пропозиції ігор
             </h2>
-            <p class="muted small">Запропонуй гру, якої ще немає в каталозі.
+            <p class="muted small">Запропонуй гру, якої ще немає в каталозі GameNest, і стеж за статусом розгляду.
             </p>
             </div>
             </div>
-            <section class="panel">
-            <form id="proposalForm" class="form-grid">
-            <div class="field">
-            <label>Назва гри *
-            </label>
-            <input name="title" required placeholder="Назва гри">
-            </div>
-            <div class="field">
-            <label>Платформа *
-            </label>
-            <select name="platform" required>
-            <option value="">Обери
-            </option>
-            <option>PC
-            </option>
-            <option>PlayStation
-            </option>
-            <option>Xbox
-            </option>
-            <option>Nintendo Switch
-            </option>
-            <option>Mobile
-            </option>
-            <option>Інша
-            </option>
-            </select>
-            </div>
-            <div class="field">
-            <label>Жанр *
-            </label>
-            <select name="genre" required>
-            <option value="">Обери
-            </option>${['RPG','Action','Пригоди','Horror','Survival','Симулятор','Strategy','Indie','Інший'].map(x=>`
-            <option>${x}
-            </option>`).join('')}
-            </select>
-            </div>
-            <div class="field">
-            <label>Посилання / опис
-            </label>
-            <input name="description" placeholder="Необов’язково">
-            </div>
-            <div class="wide">
-            <button class="btn primary">Надіслати пропозицію
+            <section class="panel row-actions">
+            <button class="btn primary" data-go="submit">＋ Запропонувати гру
             </button>
-            </div>
-            </form>
+            <button class="btn" data-go="submissions">Мої пропозиції
+            </button>
             </section>
-            <div class="section-head">
-            <h2>Останні пропозиції
-            </h2>
-            <button class="btn" data-go="library">Переглянути всі
-            </button>
-            </div>${myprops.slice(0,3).map(p=>`
-            <div class="panel" style="margin-bottom:10px;display:flex;justify-content:space-between;gap:12px;align-items:center">
-            <div>
-            <b>${esc(p.title)}
-            </b>
-            <div class="small muted">${esc(p.platform)} · ${esc(p.genre)}
-            </div>
-            </div>
-            <span class="status ${p.status==='Схвалено'?'approved':p.status==='Відхилено'?'rejected':'pending'}">${esc(p.status)}
-            </span>
-            </div>`).join('')||'<div class="empty">Поки що немає пропозицій.</div>'}
             </section>
             </div>
             </main>`,
 'profile');
-$('#proposalForm').addEventListener('submit',
-e=>{
-    e.preventDefault();
-    const f=new FormData(e.target);
-    db.proposals.unshift({
-        id:'p'+Date.now(),
-        userId:u.id,
-        userName:u.username,
-        title:f.get('title').trim(),
-        platform:f.get('platform'),
-        genre:f.get('genre'),
-        description:f.get('description').trim(),
-        status:'На розгляді',
-        createdAt:new Date().toISOString().slice(0,
-        10)
-    }
-);
-save();
-toast('Пропозицію надіслано адміністратору.');
-profile()
 }
-)
-}
-function adminPage(tab='proposals'){
+function adminPage(tab='moderation'){
     rerender=()=>adminPage(tab);
     const u=me();
     // The role comes from GET /api/Profile; the backend enforces it on every admin endpoint anyway.
@@ -997,6 +1257,9 @@ function adminPage(tab='proposals'){
         go('discover');
         return
     }
+// Real (API) admin tabs; the remaining tabs are the local demo tools.
+if(tab==='moderation'){adminModeration();return}
+if(tab==='create'){adminCreateGame();return}
 const pending=db.proposals.filter(p=>p.status==='На розгляді').length;
 let body='';
 if(tab==='proposals'){
@@ -1118,8 +1381,8 @@ layout(`
             </div>
             <h1 style="font-size:36px">Адміністрування GameNest
             </h1>
-            <p class="muted">Керуй іграми каталогу та модеруй пропозиції користувачів.
-            </p>
+            <p class="muted">Демо-інструменти: локальні пропозиції та локальний каталог із цього браузера. На сервер GameNest вони не впливають.
+            </p>${adminTabs(tab)}
             ${localNotice()}
             <div class="stat-grid" style="margin:24px 0">
             <div class="stat">
@@ -1141,17 +1404,10 @@ layout(`
             </strong>
             </div>
             </div>
-            <div class="admin-tabs">
-            <button class="chip ${tab==='proposals'?'active':''}" data-admintab="proposals">Пропозиції (${pending})
-            </button>
-            <button class="chip ${tab==='games'?'active':''}" data-admintab="games">Локальний каталог
-            </button>
-            <button class="chip ${tab==='add'?'active':''}" data-admintab="add">＋ Додати гру
-            </button>
-            </div>${body}
+${body}
             </main>`,
 'admin');
-bind();
+// layout() has already called bind(); calling it again attached every handler twice.
 if(tab==='add')bindGameForm()
 }
 function gameForm(){
@@ -1386,6 +1642,8 @@ arg){
     else if(page==='settings')settings();
     else if(page==='detail')detail(arg)
     else if(page==='game')apiDetail(arg)
+    else if(page==='submit')submitGame();
+    else if(page==='submissions')mySubmissions();
 }
 function bind(){
     $$('[data-go]').forEach(b=>b.addEventListener('click',
@@ -1403,6 +1661,20 @@ $$('[data-action="logout"]').forEach(b=>b.addEventListener('click',
 ));
 $$('[data-action="retry-profile"]').forEach(b=>b.addEventListener('click',
 ()=>session.reloadProfile()));
+// Submissions and moderation (API).
+$$('[data-submission]').forEach(b=>b.addEventListener('click',
+()=>{
+    const id=Number(b.dataset.submission);
+    if(Number.isInteger(id)&&id>0)adminSubmission(id)
+}));
+$$('[data-modfilter]').forEach(b=>b.addEventListener('click',
+()=>{
+    moderationFilter=b.dataset.modfilter;
+    adminModeration()
+}));
+$$('[data-action="submissions-retry"]').forEach(b=>b.addEventListener('click',()=>mySubmissions()));
+$$('[data-action="moderation-retry"]').forEach(b=>b.addEventListener('click',()=>adminModeration()));
+$$('[data-action="submission-retry"]').forEach(b=>b.addEventListener('click',()=>rerender()));
 $$('[data-game]').forEach(b=>b.addEventListener('click',
 ()=>detail(b.dataset.game)));
 // API catalog games (numeric ids) — never resolved through the local gameById().
