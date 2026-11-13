@@ -29,7 +29,17 @@
         google_sign_in_busy: 'Сервер зайнятий. Спробуй ще раз за мить.',
         too_many_requests: 'Забагато спроб. Зачекай трохи й спробуй знову.',
         network_error: 'Не вдалося з’єднатися із сервером. Перевір інтернет-з’єднання.',
-        timeout: 'Сервер не відповів вчасно. Можливо, він прокидається — спробуй ще раз.'
+        timeout: 'Сервер не відповів вчасно. Можливо, він прокидається — спробуй ще раз.',
+        // Library, profile, catalog and submissions (codes returned by the GameNest controllers).
+        game_already_in_library: 'Ця гра вже є у твоїй бібліотеці.',
+        game_not_found: 'Гру не знайдено: можливо, її архівовано.',
+        game_title_not_found: 'Спільну назву гри не знайдено.',
+        username_already_exists: 'Це ім’я користувача вже зайняте.',
+        submission_already_reviewed: 'Цю пропозицію вже розглянули, змінити її не можна.',
+        correction_requires_existing_game: 'Гру, яку потрібно виправити, не знайдено в каталозі.',
+        new_game_must_not_have_game_id: 'Нова гра не може посилатися на наявну гру.',
+        concurrent_update: 'Дані щойно змінив інший запит. Онови сторінку й спробуй ще раз.',
+        invalid_status: 'Некоректний фільтр статусу.'
     };
 
     const statusMessages = {
@@ -75,7 +85,7 @@
      * Sends a request. `auth` (default true) adds the GameNest JWT when one exists.
      * Resolves with the parsed JSON (or null for empty responses); rejects with ApiError.
      */
-    async function request(method, path, { body, auth = true, signal } = {}) {
+    async function request(method, path, { body, auth = true, signal, timeoutMs } = {}) {
         const headers = { Accept: 'application/json' };
         const init = { method, headers, mode: 'cors', credentials: 'omit', cache: 'no-store' };
         if (body !== undefined) {
@@ -86,7 +96,7 @@
         if (token) headers.Authorization = `Bearer ${token}`;
 
         const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort('timeout'), config.requestTimeoutMs);
+        const timer = setTimeout(() => controller.abort('timeout'), timeoutMs || config.requestTimeoutMs);
         if (signal) signal.addEventListener('abort', () => controller.abort(signal.reason), { once: true });
         init.signal = controller.signal;
 
@@ -125,6 +135,18 @@
         post: (path, body, options) => request('POST', path, { ...options, body }),
         put: (path, body, options) => request('PUT', path, { ...options, body }),
         delete: (path, options) => request('DELETE', path, options),
+        /**
+         * GET /api/health (public). Resolves true when the API answers {"status":"ok"}, false otherwise; never rejects.
+         * Used to tell a network/CORS failure of one request apart from an API that is down or still waking up.
+         */
+        async health() {
+            try {
+                const data = await request('GET', '/api/health', { auth: false, timeoutMs: 15000 });
+                return !!data && data.status === 'ok';
+            } catch {
+                return false;
+            }
+        },
         /** Supplies the current GameNest JWT (called for every authenticated request). */
         setTokenProvider(fn) { tokenProvider = typeof fn === 'function' ? fn : () => null; },
         /** Called once per failed authenticated request with status 401. */

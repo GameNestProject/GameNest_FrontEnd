@@ -1241,3 +1241,46 @@ tr:last-child td {
 .poster.game-image:after {
     display: none;
 }
+
+/* ---------- API integration: library, own games, profile ---------- */
+button.user-pill {
+    border: 0;
+    padding: 0;
+    cursor: pointer;
+}
+
+.library-controls {
+    display: grid;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.library-controls .search {
+    max-width: none;
+    width: 100%;
+    padding: 9px 11px;
+}
+
+.game-card[aria-busy="true"] {
+    opacity: .65;
+}
+
+.clamp {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    margin: 10px 0 0;
+}
+
+@media (max-width: 760px) {
+    /* The side navigation scrolls horizontally inside the sidebar instead of widening the whole page. */
+    .layout-two {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .sidebar,
+    .side-nav {
+        min-width: 0;
+    }
+}
