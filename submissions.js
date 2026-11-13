@@ -1,11 +1,13 @@
 // Game submissions and moderation through the GameNest API (no local storage).
-//   POST /api/Submissions                 — propose a game (authenticated user)
-//   GET  /api/Submissions/mine            — the caller's own submissions
-//   GET  /api/Submissions?status=…        — admin: all submissions (users only get their own)
-//   GET  /api/Submissions/{id}            — one submission (owner or admin)
-//   PUT  /api/Submissions/{id}/approve    — admin: approve → game added to the catalog
-//   PUT  /api/Submissions/{id}/reject     — admin: reject with an optional reason
-//   POST /api/Games                       — admin: add a game to the catalog directly
+//   POST   /api/Submissions                 — propose a new game, or a correction of a catalog game (authenticated user)
+//   GET    /api/Submissions/mine?status=…   — the caller's own submissions
+//   GET    /api/Submissions?status=…        — admin: all submissions (users only get their own)
+//   GET    /api/Submissions/{id}            — one submission (owner or admin)
+//   PUT    /api/Submissions/{id}            — edit a pending submission (owner or admin)
+//   DELETE /api/Submissions/{id}            — withdraw an own pending submission
+//   PUT    /api/Submissions/{id}/approve    — admin: approve → game added to (or corrected in) the catalog
+//   PUT    /api/Submissions/{id}/reject     — admin: reject with an optional reason
+//   POST   /api/Games                       — admin: add a game to the catalog directly
 // The backend validates everything again; the checks here only give faster feedback.
 (() => {
     'use strict';
@@ -119,12 +121,21 @@
     }
     const list = data => (Array.isArray(data) ? data.map(normalize).filter(Boolean) : []);
 
+    const statusQuery = status => (status ? `?status=${encodeURIComponent(status)}` : '');
+    // A submission keeps its type; a correction keeps the game it corrects.
+    const submissionBody = (values, type, gameId) =>
+        ({ type, gameId: type === 'Correction' ? gameId : null, ...gameBody(values) });
+
     window.GameNestSubmissions = Object.freeze({
-        LIMITS, STATUS,
-        readForm, validate, fieldErrors,
-        submit: values => api.post('/api/Submissions', { type: 'NewGame', ...gameBody(values) }).then(normalize),
-        mine: () => api.get('/api/Submissions/mine').then(list),
-        adminList: (status = 'Pending') => api.get('/api/Submissions' + (status ? `?status=${encodeURIComponent(status)}` : '')).then(list),
+        LIMITS, STATUS, TYPE,
+        readForm, validate, fieldErrors, gameBody,
+        submit: values => api.post('/api/Submissions', submissionBody(values, 'NewGame')).then(normalize),
+        submitCorrection: (gameId, values) => api.post('/api/Submissions', submissionBody(values, 'Correction', gameId)).then(normalize),
+        update: (submission, values) =>
+            api.put(`/api/Submissions/${encodeURIComponent(submission.id)}`, submissionBody(values, submission.type, submission.gameId)).then(normalize),
+        remove: id => api.delete(`/api/Submissions/${encodeURIComponent(id)}`),
+        mine: (status = '') => api.get('/api/Submissions/mine' + statusQuery(status)).then(list),
+        adminList: (status = 'Pending') => api.get('/api/Submissions' + statusQuery(status)).then(list),
         get: id => api.get(`/api/Submissions/${encodeURIComponent(id)}`).then(normalize),
         approve: id => api.put(`/api/Submissions/${encodeURIComponent(id)}/approve`).then(normalize),
         reject: (id, reason) => api.put(`/api/Submissions/${encodeURIComponent(id)}/reject`, { adminComment: text(reason) || null }).then(normalize),

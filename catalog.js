@@ -1,13 +1,17 @@
-// Public game catalog from the GameNest API (GET /api/Games, GET /api/Games/{id}).
-// Kept in memory only — never written to localStorage — and fully separate from the local demo data in app.js
-// (db.games / gameById), which the local library and local admin panel still use.
+// Game catalog from the GameNest API. Kept in memory only — never written to localStorage.
+//   GET    /api/Games                      — public catalog (archived games are not listed)
+//   GET    /api/Games/{id}                 — one game
+//   GET    /api/GameTitles/{id}/versions   — all catalog versions sharing a game title
+//   PUT    /api/Games/{id}                 — admin: edit a game
+//   DELETE /api/Games/{id}                 — admin: archive a game (soft delete)
+// (POST /api/Games — admin: add a game — lives in submissions.js next to the shared game form.)
 (() => {
     'use strict';
 
     const api = window.GameNestApi;
 
     // status: 'idle' | 'loading' | 'success' | 'error'
-    let state = { status: 'idle', games: [], error: null };
+    let state = { status: 'idle', games: [], error: null, errorStatus: null };
     let pending = null;
     const listeners = new Set();
 
@@ -49,7 +53,9 @@
             releaseDate,
             // UTC parts: the backend stores dates as UTC midnight, local time could shift them by a day.
             releaseYear: releaseDate ? releaseDate.getUTCFullYear() : null,
-            gameTitleId: Number.isInteger(game.gameTitleId) ? game.gameTitleId : null
+            gameTitleId: Number.isInteger(game.gameTitleId) ? game.gameTitleId : null,
+            // Archived games never appear in the catalog, but library items can still point to them.
+            isArchived: game.isArchived === true
         });
     }
 
@@ -57,7 +63,7 @@
     function load({ force = false } = {}) {
         if (pending) return pending;
         if (!force && state.status === 'success') return Promise.resolve(state.games);
-        setState({ status: 'loading', error: null });
+        setState({ status: 'loading', error: null, errorStatus: null });
         pending = api.get('/api/Games', { auth: false })
             .then(data => {
                 if (!Array.isArray(data)) throw new api.ApiError(500, 'invalid_catalog', 'Сервер повернув некоректний каталог.');
@@ -66,7 +72,7 @@
                 return games;
             })
             .catch(error => {
-                setState({ status: 'error', error: api.describeError(error) });
+                setState({ status: 'error', error: api.describeError(error), errorStatus: error?.status ?? null });
                 return [];
             })
             .finally(() => { pending = null; });
@@ -91,6 +97,37 @@
         }
     }
 
+    /** Other catalog versions of a game title (the given game excluded). 404 (unknown title) gives an empty list. */
+    async function versions(gameTitleId, exceptGameId) {
+        if (!Number.isInteger(gameTitleId) || gameTitleId <= 0) return [];
+        try {
+            const data = await api.get(`/api/GameTitles/${gameTitleId}/versions`, { auth: false });
+            if (!Array.isArray(data)) throw new api.ApiError(500, 'invalid_versions', 'Сервер повернув некоректний список версій.');
+            return data.map(normalize).filter(g => g && g.id !== exceptGameId);
+        } catch (error) {
+            if (error instanceof api.ApiError && error.status === 404) return [];
+            throw error;
+        }
+    }
+
+    /**
+     * Admin: saves a game (PUT /api/Games/{id}). `body` uses the CreateGameDto fields; the game keeps its game title
+     * (versions stay grouped) unless gameTitleId is passed explicitly. The catalog list is reloaded afterwards.
+     */
+    async function updateGame(id, body) {
+        const game = normalize(await api.put(`/api/Games/${encodeURIComponent(id)}`, body));
+        if (!game) throw new api.ApiError(500, 'invalid_game', 'Сервер повернув некоректні дані гри.');
+        load({ force: true });
+        return game;
+    }
+
+    /** Admin: archives a game (DELETE /api/Games/{id}); it disappears from the public catalog. */
+    async function archiveGame(id) {
+        await api.delete(`/api/Games/${encodeURIComponent(id)}`);
+        setState({ games: state.games.filter(g => g.id !== id) });
+        load({ force: true });
+    }
+
     const collator = new Intl.Collator('uk', { sensitivity: 'base', numeric: true });
 
     /** Client-side search (title, developer, publisher, description) and sort by title ('asc' | 'desc'). */
@@ -110,7 +147,11 @@
         load,
         cachedById,
         fetchById,
+        versions,
+        updateGame,
+        archiveGame,
         query,
+        normalize,
         safeHttpsUrl
     });
 })();

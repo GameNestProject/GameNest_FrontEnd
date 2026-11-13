@@ -1053,3 +1053,234 @@ tr:last-child td {
         font-size: 22px;
     }
 }
+
+/* Кнопка повної інформації */
+.info-btn {
+    width: 36px;
+    height: 36px;
+    flex: 0 0 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--line);
+    border-radius: 50%;
+    background: #fffaf5;
+    color: var(--nav);
+    font: 700 16px Manrope, sans-serif;
+    cursor: pointer;
+    transition: .2s;
+}
+
+.info-btn:hover {
+    background: var(--nav);
+    color: white;
+}
+
+/* Затемнення фону */
+.game-preview-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: rgba(25, 22, 21, .68);
+    backdrop-filter: blur(5px);
+}
+
+/* Вікно перегляду */
+.game-preview {
+    position: relative;
+    width: min(680px, 100%);
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 22px;
+    background: var(--card);
+    box-shadow: 0 24px 80px #0005;
+    animation: preview-appear .18s ease-out;
+}
+
+@keyframes preview-appear {
+    from {
+        opacity: 0;
+        transform: translateY(10px) scale(.985);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+/* Закриття */
+.game-preview-close {
+    position: absolute;
+    z-index: 2;
+    top: 14px;
+    right: 14px;
+    width: 38px;
+    height: 38px;
+    border: 1px solid #ffffff88;
+    border-radius: 50%;
+    background: #242123bb;
+    color: white;
+    font-size: 25px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+/* Зображення гри */
+.game-preview-art {
+    min-height: 300px;
+    display: flex;
+    align-items: end;
+    padding: 24px;
+    background-size: cover;
+    background-position: center;
+    color: white;
+}
+
+.game-preview-art:not([style*="background-image"]) {
+    background-image: linear-gradient(145deg, #8bb0a5, #263d3a);
+}
+
+.game-preview-art.p2:not([style*="background-image"]) {
+    background-image: linear-gradient(145deg, #e8a45f, #5c3b39);
+}
+
+.game-preview-art.p3:not([style*="background-image"]) {
+    background-image: linear-gradient(145deg, #a8c7d3, #425e72);
+}
+
+.game-preview-art.p4:not([style*="background-image"]) {
+    background-image: linear-gradient(145deg, #7b6556, #252426);
+}
+
+.game-preview-art.p5:not([style*="background-image"]) {
+    background-image: linear-gradient(145deg, #b6aa9c, #5b4742);
+}
+
+.game-preview-art span {
+    font: 800 clamp(24px, 5vw, 36px) Manrope, sans-serif;
+    text-shadow: 0 2px 12px #0009;
+}
+
+/* Опис */
+.game-preview-content {
+    padding: 26px 30px 30px;
+}
+
+.game-preview-content h2 {
+    margin: 8px 0 12px;
+    font-size: 28px;
+}
+
+.game-preview-content p {
+    margin: 0;
+    color: var(--muted, #766c66);
+    line-height: 1.75;
+}
+
+/* Телефони */
+@media (max-width: 600px) {
+    .game-preview-backdrop {
+        padding: 14px;
+    }
+
+    .game-preview-art {
+        min-height: 210px;
+    }
+
+    .game-preview-content {
+        padding: 20px;
+    }
+
+    .game-preview-content h2 {
+        font-size: 23px;
+    }
+}
+
+/* Рейтинг гри */
+.game-rating {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin: 14px 0 20px;
+}
+
+.rating-stars {
+    display: flex;
+    gap: 3px;
+    color: #d8cec3;
+    font-size: 23px;
+    letter-spacing: 1px;
+}
+
+.rating-stars .filled {
+    color: #f0a52e;
+}
+
+.game-rating strong {
+    font-size: 16px;
+    color: var(--ink);
+}
+
+.rating-scale,
+.rating-empty {
+    color: var(--muted);
+    font-size: 12px;
+}
+
+/* Справжні обкладинки ігор */
+.poster.game-image {
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+}
+
+.poster.game-image:after {
+    display: none;
+}
+
+/* ---------- API integration: library, own games, profile ---------- */
+button.user-pill {
+    border: 0;
+    padding: 0;
+    cursor: pointer;
+}
+
+.library-controls {
+    display: grid;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.library-controls .search {
+    max-width: none;
+    width: 100%;
+    padding: 9px 11px;
+}
+
+.game-card[aria-busy="true"] {
+    opacity: .65;
+}
+
+.clamp {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    margin: 10px 0 0;
+}
+
+@media (max-width: 760px) {
+    /* The side navigation scrolls horizontally inside the sidebar instead of widening the whole page. */
+    .layout-two {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .sidebar,
+    .side-nav {
+        min-width: 0;
+    }
+}
