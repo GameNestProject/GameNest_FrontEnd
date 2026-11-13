@@ -1,5 +1,6 @@
 // Session management: Google Identity Services → POST /api/Auth/google → GameNest JWT → GET /api/Profile.
-// The GameNest JWT is kept in sessionStorage only; the user (and role) live in memory and always come from the backend.
+// The GameNest JWT is kept in localStorage (stays signed in across browser restarts until it expires or the user signs
+// out); the user (and role) live in memory and always come from the backend.
 // The Google credential is used once to obtain the GameNest JWT and is never stored.
 (() => {
     'use strict';
@@ -18,18 +19,51 @@
         listeners.forEach(fn => { try { fn(state); } catch (e) { console.error('Session listener failed', e); } });
     }
 
+    // The JWT is kept in localStorage so the user stays signed in after closing the browser (the backend issues
+    // long-lived tokens, Jwt:LifetimeDays). An expired token is dropped locally instead of costing a 401 round trip.
+    function isExpired(token) {
+        try {
+            const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+            return typeof payload.exp === 'number' && payload.exp * 1000 <= Date.now();
+        } catch {
+            return true; // not a JWT
+        }
+    }
     function readToken() {
-        try { return sessionStorage.getItem(TOKEN_KEY); } catch { return null; }
+        try {
+            // One-time move of a token from the previous sessionStorage-based version.
+            const legacy = sessionStorage.getItem(TOKEN_KEY);
+            if (legacy) {
+                sessionStorage.removeItem(TOKEN_KEY);
+                if (!localStorage.getItem(TOKEN_KEY)) localStorage.setItem(TOKEN_KEY, legacy);
+            }
+            const token = localStorage.getItem(TOKEN_KEY);
+            if (token && isExpired(token)) {
+                localStorage.removeItem(TOKEN_KEY);
+                return null;
+            }
+            return token;
+        } catch {
+            return null;
+        }
     }
     function writeToken(token) {
-        try { sessionStorage.setItem(TOKEN_KEY, token); } catch { /* storage unavailable: session lasts for this page only */ }
+        try { localStorage.setItem(TOKEN_KEY, token); } catch { /* storage unavailable: session lasts for this page only */ }
         memoryToken = token;
     }
     function removeToken() {
-        try { sessionStorage.removeItem(TOKEN_KEY); } catch { /* ignore */ }
+        try { localStorage.removeItem(TOKEN_KEY); } catch { /* ignore */ }
         memoryToken = null;
     }
     let memoryToken = readToken();
+
+    // Signing in or out in another tab applies here too.
+    window.addEventListener('storage', event => {
+        if (event.key !== TOKEN_KEY || event.storageArea !== localStorage || event.newValue === memoryToken) return;
+        memoryToken = event.newValue;
+        if (memoryToken) loadProfile();
+        else setState({ status: 'anonymous', user: null, error: null });
+    });
 
     api.setTokenProvider(() => memoryToken);
     api.onUnauthorized(() => {
