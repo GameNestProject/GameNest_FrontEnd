@@ -8,7 +8,7 @@
     const UserGames = window.GameNestUserGames;
     const Profile = window.GameNestProfile;
     const Submissions = window.GameNestSubmissions;
-    // All data comes from the GameNest API. Nothing is stored in localStorage; the JWT lives in sessionStorage (session.js).
+    // All data comes from the GameNest API. The only thing stored in the browser is the JWT (localStorage, session.js).
     let rerender = () => discover();
 
 function esc(v=''){
