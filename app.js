@@ -692,7 +692,7 @@ function gameFieldsForm(id,submitLabel,{trailer=true}={}){
             <input id="${id}-releaseDate" name="releaseDate" type="date" min="${L.minYear}-01-01">`)}${field('developer','Розробник',`
             <input id="${id}-developer" name="developer" maxlength="${L.name}" autocomplete="off">`)}${field('publisher','Видавець',`
             <input id="${id}-publisher" name="publisher" maxlength="${L.name}" autocomplete="off">`)}${field('coverUrl','Обкладинка (URL)',`
-            <input id="${id}-coverUrl" name="coverUrl" type="url" inputmode="url" maxlength="${L.url}" placeholder="https://…">`,!trailer)}${trailer?field('trailerUrl','Трейлер (URL)',`
+            <input id="${id}-coverUrl" name="coverUrl" type="url" inputmode="url" maxlength="${L.url}" placeholder="https://…">`,!trailer)}${trailer?field('trailerUrl','YouTube-трейлер (посилання)',`
             <input id="${id}-trailerUrl" name="trailerUrl" type="url" inputmode="url" maxlength="${L.url}" placeholder="https://…">`):''}${field('description','Опис',`
             <textarea id="${id}-description" name="description" rows="5" maxlength="${L.description}"></textarea>`,true)}
             <div class="wide form-status small" id="${id}-status" role="status" aria-live="polite">
@@ -963,7 +963,10 @@ async function withdrawSubmission(s,button){
 function adminTabs(tab){
     const chip=(key,label)=>`<button class="chip ${tab===key?'active':''}" data-admintab="${key}">${label}</button>`;
     return `
-            <div class="admin-tabs" aria-label="Адміністрування">${chip('moderation','Модерація пропозицій')}${chip('create','＋ Додати гру в каталог')}
+            <div class="admin-tabs" aria-label="Каталог GameNest">
+    ${chip('moderation','Модерація пропозицій')}
+    ${chip('create','＋ Додати гру в каталог')}
+    ${chip('catalog','Керування іграми')}
             </div>`
 }
 function adminShell(tab,body){
@@ -1175,6 +1178,80 @@ function adminCreateGame(){
         }
     })
 }
+// Admin: керування справжнім серверним каталогом.
+function adminCatalogGames() {
+    const isCurrent = beginView(() => adminCatalogGames());
+
+    if (!requireAdmin()) return;
+
+    const render = body => adminShell('catalog', body);
+
+    render(loadingBlock('Завантажуємо ігри з сервера…'));
+
+    window.GameNestCatalog.load({ force: true }).then(games => {
+        if (!isCurrent()) return;
+
+        const state = window.GameNestCatalog.state;
+
+        if (state.status === 'error') {
+            render(errorBlock(
+                'Не вдалося завантажити каталог',
+                state.error,
+                'admin-catalog-retry'
+            ));
+            return;
+        }
+
+        render(games.length ? `
+            <section class="panel" style="margin-top:18px">
+                <div class="section-head">
+                    <div>
+                        <h2>Серверний каталог</h2>
+                        <p class="muted small">
+                            Усього ігор: ${games.length}
+                        </p>
+                    </div>
+                </div>
+
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Назва гри</th>
+                                <th>Розробник</th>
+                                <th>Видавець</th>
+                                <th>Дії</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${games.map(g => `
+                                <tr>
+                                    <td>${g.id}</td>
+                                    <td><b>${esc(g.title)}</b></td>
+                                    <td>${esc(g.developer || '—')}</td>
+                                    <td>${esc(g.publisher || '—')}</td>
+                                    <td>
+                                        <button
+                                            class="btn danger"
+                                            data-archive-game="${g.id}">
+                                            Архівувати
+                                        </button>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        ` : `
+            <div class="empty">
+                <h3>Каталог порожній</h3>
+                <p>На сервері поки немає активних ігор.</p>
+            </div>
+        `);
+    });
+}
 // Admin: edit a catalog game (PUT /api/Games/{id}). The game keeps its game title, so its versions stay grouped.
 function adminEditGame(id){
     const isCurrent=beginView(()=>adminEditGame(id));
@@ -1216,6 +1293,7 @@ function adminEditGame(id){
 function adminPage(tab='moderation'){
     if(tab==='create')adminCreateGame();
     else adminModeration()
+    if(tab==='catalog'){adminCatalogGames();return}
 }
 
 // ---------- Sign-in (Google only: password sign-in is switched off on the server for the MVP) ----------
@@ -1874,6 +1952,43 @@ function bind(){
     $$('img[data-cover]').filter(img=>!img.closest('#gameGrid')).forEach(img=>img.addEventListener('error',()=>onCoverError(img),{once:true}));
     $$('[data-scroll]').forEach(b=>b.addEventListener('click',()=>document.getElementById(b.dataset.scroll)?.scrollIntoView({behavior:'smooth'})));
     $$('[data-admintab]').forEach(b=>b.addEventListener('click',()=>adminPage(b.dataset.admintab)));
+    $$('[data-archive-game]').forEach(button => {
+    button.addEventListener('click', async () => {
+        const id = Number(button.dataset.archiveGame);
+
+        const game = window.GameNestCatalog.state.games
+            .find(g => g.id === id);
+
+        if (!game) return;
+
+        if (!confirm(`Архівувати гру «${game.title}»?`)) {
+            return;
+        }
+
+        button.disabled = true;
+        button.textContent = 'Архівуємо…';
+
+        try {
+            await window.GameNestSubmissions.archiveGame(id);
+
+            await window.GameNestCatalog.load({ force: true });
+
+            toast('Гру успішно архівовано.');
+
+            adminCatalogGames();
+        } catch (error) {
+            button.disabled = false;
+            button.textContent = 'Архівувати';
+
+            toast(window.GameNestApi.describeError(error));
+        }
+    });
+});
+
+$$('[data-action="admin-catalog-retry"]')
+    .forEach(button => button.addEventListener('click', () => {
+        adminCatalogGames();
+    }));
     runHealthChecks()
 }
 // Every session change (sign-in, profile loaded, 401, sign-out) re-renders the current page;
