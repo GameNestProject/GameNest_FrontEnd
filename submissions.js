@@ -139,6 +139,7 @@
         get: id => api.get(`/api/Submissions/${encodeURIComponent(id)}`).then(normalize),
         approve: id => api.put(`/api/Submissions/${encodeURIComponent(id)}/approve`).then(normalize),
         reject: (id, reason) => api.put(`/api/Submissions/${encodeURIComponent(id)}/reject`, { adminComment: text(reason) || null }).then(normalize),
-        createGame: values => api.post('/api/Games', gameBody(values))
+        createGame: values => api.post('/api/Games', gameBody(values)),
+        archiveGame: id => api.delete(`/api/Games/${encodeURIComponent(id)}`)
     });
 })();

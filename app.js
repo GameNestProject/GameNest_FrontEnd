@@ -9,7 +9,7 @@
     const Profile = window.GameNestProfile;
     const Submissions = window.GameNestSubmissions;
     // All data comes from the GameNest API. The only thing stored in the browser is the JWT (localStorage, session.js).
-    let rerender = () => discover();
+    let rerender = () => home();
 
 function esc(v=''){
     return String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))
@@ -54,28 +54,42 @@ function sessionControls(u){
             <button class="login" data-go="auth">Увійти через Google
             </button>`
 }
-function header(active='discover'){
-    const u=me();
+function header(active = 'home') {
+    const u = me();
+
     return `
-            <header class="topbar">
-            <a class="brand" href="#" data-go="discover">
-            <img src="assets/gamenest-logo.png" alt="GameNest">
-            <div>Game
-            <span>Nest
-            </span>
-            </div>
+        <header class="topbar">
+            <a class="brand" href="#" data-go="home">
+                <img src="assets/gamenest-logo.png" alt="GameNest">
+                <div>Game<span>Nest</span></div>
             </a>
+
             <nav class="nav">
-            <button data-go="discover" class="${active==='discover'?'active':''}">⌕ &nbsp;Каталог
-            </button>
-            <button data-go="library" class="${active==='library'?'active':''}">▣ &nbsp;Моя бібліотека
-            </button>
-            <button data-go="profile" class="${active==='profile'?'active':''}">☆ &nbsp;Кабінет
-            </button>${u&&u.isAdmin?`
-            <button data-go="admin" class="${active==='admin'?'active':''}">⚙ &nbsp;Адмінпанель
-            </button>`:''}${sessionControls(u)}
+                <button data-go="home" class="${active === 'home' ? 'active' : ''}">
+                    ⌂ &nbsp;Головна
+                </button>
+
+                <button data-go="discover" class="${active === 'discover' ? 'active' : ''}">
+                    ⌕ &nbsp;Каталог
+                </button>
+
+                <button data-go="library" class="${active === 'library' ? 'active' : ''}">
+                    ▣ &nbsp;Моя бібліотека
+                </button>
+
+                <button data-go="profile" class="${active === 'profile' ? 'active' : ''}">
+                    ☆ &nbsp;Кабінет
+                </button>
+
+                ${u && u.isAdmin ? `
+                    <button data-go="admin" class="${active === 'admin' ? 'active' : ''}">
+                        ⚙ &nbsp;Адмінпанель
+                    </button>
+                ` : ''}
+
+                ${sessionControls(u)}
             </nav>
-            </header>`
+        </header>`;
 }
 function layout(content,active){
     $('#app').innerHTML=`
@@ -211,24 +225,48 @@ function apiGameCard(g){
     return `
         <article class="game-card" aria-label="Гра ${esc(g.title)}">
             ${apiPoster(g)}
+
             <div class="card-body">
                 <div class="card-title-row">
                     <div>
                         <h3>${esc(g.title)}</h3>
                         <div class="small muted">${apiGameMeta(g)||'&nbsp;'}</div>
                     </div>
-                </div>${g.publisher?`
+                </div>
+
+                ${g.publisher?`
                 <div class="tag-row">
                     <span class="tag">${esc(g.publisher)}</span>
                 </div>`:''}
+
                 <div class="card-bottom">
-                    <button class="btn" data-api-game="${esc(g.id)}" aria-label="Детальніше про гру ${esc(g.title)}">
+                    <button class="btn" data-api-game="${esc(g.id)}"
+                        aria-label="Детальніше про гру ${esc(g.title)}">
                         Детальніше
                     </button>${catalogLibraryAction(g)}
                 </div>
             </div>
-        </article>`
+
+            <div class="game-preview" aria-hidden="true">
+                <h3>${esc(g.title)}</h3>
+
+                ${g.developer ? `
+                    <p><b>Розробник:</b> ${esc(g.developer)}</p>
+                ` : ''}
+
+                ${g.publisher ? `
+                    <p><b>Видавець:</b> ${esc(g.publisher)}</p>
+                ` : ''}
+
+                <p class="preview-description">
+                    ${esc(g.description || 'Опис гри поки відсутній.')}
+                </p>
+
+                <span class="preview-hint">Натисни «Детальніше», щоб переглянути гру</span>
+            </div>
+        </article>`;
 }
+
 function catalogResults(){
     const cs=Catalog.state;
     if(cs.status==='idle'||cs.status==='loading')return `
@@ -269,69 +307,116 @@ function catalogCount(){
     const cs=Catalog.state;
     return cs.status==='success'?pluralGames(cs.games.length):cs.status==='error'?'Недоступно':'Завантаження…'
 }
-function discover(){
-    rerender=()=>discover();
-    const cs=Catalog.state;
-    const ready=cs.status==='success'&&cs.games.length>0;
-    const content=`
-            <main class="container" data-page="discover">
+// ---------- Головна сторінка ----------
+function home() {
+    rerender = () => home();
+
+    const content = `
+        <main class="container" data-page="home">
             <section class="hero">
-            <div>
-            <div class="eyebrow">Твій особистий ігровий простір
-            </div>
-            <h1>Твої ігри.
-            <br>
-            <span class="accent">Твоя подорож.
-            </span>
-            </h1>
-            <p>Збирай ігрову бібліотеку, впорядковуй колекцію та відкривай, у що пограти далі. Статуси проходження ти контролюєш самостійно.
-            </p>
-            <div class="hero-actions">
-            <button class="btn primary" data-scroll="catalog">Переглянути каталог&nbsp; →
-            </button>
-            <button class="btn" data-go="library">Моя бібліотека
-            </button>
-            </div>
-            </div>
-            <div class="hero-art">
-            <img src="assets/gamenest-logo.png" alt="">
-            </div>
+                <div>
+                    <div class="eyebrow">Твій особистий ігровий простір</div>
+
+                    <h1>
+                        Твої ігри.
+                        <br>
+                        <span class="accent">Твоя подорож.</span>
+                    </h1>
+
+                    <p>
+                        Збирай ігрову бібліотеку, впорядковуй колекцію
+                        та відкривай, у що пограти далі.
+                        Статуси проходження ти контролюєш самостійно.
+                    </p>
+
+                    <div class="hero-actions">
+                        <button class="btn primary" data-go="discover">
+                            Переглянути каталог →
+                        </button>
+
+                        <button class="btn" data-go="library">
+                            Моя бібліотека
+                        </button>
+                    </div>
+                </div>
+
+                <div class="hero-art">
+                    <img src="assets/gamenest-logo.png" alt="GameNest">
+                </div>
             </section>
-            <div class="section-head" id="catalog">
-            <div>
-            <div class="eyebrow">Вибирай наступну пригоду
+        </main>`;
+
+    layout(content, 'home');
+}
+
+// ---------- Каталог ігор ----------
+function discover() {
+    rerender = () => discover();
+
+    const cs = Catalog.state;
+    const ready = cs.status === 'success' && cs.games.length > 0;
+
+    const content = `
+        <main class="container" data-page="discover">
+            <div class="section-head">
+                <div>
+                    <div class="eyebrow">Вибирай наступну пригоду</div>
+                    <h1 style="font-size:36px">Каталог ігор</h1>
+                    <p class="muted small">
+                        Знайди гру за назвою, розробником, видавцем або описом.
+                    </p>
+                </div>
+
+                <div class="row-actions">
+                    <span class="status" id="catalogCount">${catalogCount()}</span>
+                    <button class="btn primary" data-go="submit">
+                        ＋ Запропонувати гру
+                    </button>
+                </div>
             </div>
-            <h2>Каталог ігор
-            </h2>
-            <p class="muted small">Знайди гру за назвою, розробником, видавцем або описом.
-            </p>
+
+            ${ready ? `
+                <div class="toolbar">
+                    <input
+                        class="search"
+                        id="gameSearch"
+                        type="search"
+                        placeholder="⌕ Пошук ігор..."
+                        aria-label="Пошук ігор"
+                        value="${esc(catalogView.search)}">
+
+                    <select class="search" id="gameSort" aria-label="Сортування за назвою">
+                        <option value="asc" ${catalogView.sort === 'asc' ? 'selected' : ''}>
+                            Назва: А → Я
+                        </option>
+                        <option value="desc" ${catalogView.sort === 'desc' ? 'selected' : ''}>
+                            Назва: Я → А
+                        </option>
+                    </select>
+
+                    <button class="btn" id="resetFilters" type="button">
+                        Скинути
+                    </button>
+                </div>
+            ` : ''}
+
+            <div class="grid" id="gameGrid">
+                ${catalogResults()}
             </div>
-            <div class="row-actions">
-            <span class="status" id="catalogCount">${catalogCount()}
-            </span>
-            <button class="btn primary" data-go="submit">＋ Запропонувати гру
-            </button>
-            </div>
-            </div>${ready?`
-        <div class="toolbar">
-            <input class="search" id="gameSearch" type="search" placeholder="⌕ Пошук ігор..." aria-label="Пошук ігор" value="${esc(catalogView.search)}">
-            <select class="search" id="gameSort" aria-label="Сортування за назвою">
-                <option value="asc" ${catalogView.sort==='asc'?'selected':''}>Назва: А → Я</option>
-                <option value="desc" ${catalogView.sort==='desc'?'selected':''}>Назва: Я → А</option>
-            </select>
-            <button class="btn" id="resetFilters" type="button">Скинути</button>
-        </div>`:''}
-            <div class="grid" id="gameGrid">${catalogResults()}
-            </div>
-            </main>`;
-    layout(content,'discover');
+        </main>`;
+
+    layout(content, 'discover');
     bindCatalogControls();
     bindCatalogGrid();
-    if(cs.status==='idle')Catalog.load();
+
+    if (cs.status === 'idle') Catalog.load();
 }
-function openApiGame(el){
-    const id=Number(el.dataset.apiGame);
-    if(Number.isInteger(id)&&id>0)apiDetail(id)
+function openApiGame(el) {
+    const id = Number(el.dataset.apiGame);
+
+    if (Number.isInteger(id) && id > 0) {
+        go('game', id);
+    }
 }
 // A broken cover image falls back to the gradient placeholder underneath it.
 function onCoverError(img){
@@ -594,7 +679,7 @@ function bindLibraryPanel(g){
     const box=$('#libraryPanel');
     if(!box)return;
     box.querySelector('#libSignIn')?.addEventListener('click',()=>{
-        afterSignIn=()=>apiDetail(g.id);
+        afterSignIn = () => go('game', g.id);
         auth()
     });
     box.querySelector('[data-action="library-retry"]')?.addEventListener('click',()=>Library.load({force:true}));
@@ -668,7 +753,7 @@ function gameFieldsForm(id,submitLabel,{trailer=true}={}){
             <input id="${id}-releaseDate" name="releaseDate" type="date" min="${L.minYear}-01-01">`)}${field('developer','Розробник',`
             <input id="${id}-developer" name="developer" maxlength="${L.name}" autocomplete="off">`)}${field('publisher','Видавець',`
             <input id="${id}-publisher" name="publisher" maxlength="${L.name}" autocomplete="off">`)}${field('coverUrl','Обкладинка (URL)',`
-            <input id="${id}-coverUrl" name="coverUrl" type="url" inputmode="url" maxlength="${L.url}" placeholder="https://…">`,!trailer)}${trailer?field('trailerUrl','Трейлер (URL)',`
+            <input id="${id}-coverUrl" name="coverUrl" type="url" inputmode="url" maxlength="${L.url}" placeholder="https://…">`,!trailer)}${trailer?field('trailerUrl','YouTube-трейлер (посилання)',`
             <input id="${id}-trailerUrl" name="trailerUrl" type="url" inputmode="url" maxlength="${L.url}" placeholder="https://…">`):''}${field('description','Опис',`
             <textarea id="${id}-description" name="description" rows="5" maxlength="${L.description}"></textarea>`,true)}
             <div class="wide form-status small" id="${id}-status" role="status" aria-live="polite">
@@ -823,12 +908,14 @@ function submissionForm(opts={mode:'new'}){
         onError:error=>{
             if(mode==='edit'&&error.status===409){
                 toast(describe(error));
-                opts.admin?adminSubmission(opts.submission.id):mySubmissions();
+                opts.admin?go('adminSubmission', opts.submission.id):mySubmissions();
                 return true
             }
             return false
         },
-        onSuccess:result=>mode==='edit'&&opts.admin?adminSubmission(result?.id??opts.submission.id):mySubmissions()
+        onSuccess: result => mode === 'edit' && opts.admin
+    ? go('adminSubmission', result?.id ?? opts.submission.id)
+    : mySubmissions()
     })
 }
 function submitGame(){
@@ -939,7 +1026,10 @@ async function withdrawSubmission(s,button){
 function adminTabs(tab){
     const chip=(key,label)=>`<button class="chip ${tab===key?'active':''}" data-admintab="${key}">${label}</button>`;
     return `
-            <div class="admin-tabs" aria-label="Адміністрування">${chip('moderation','Модерація пропозицій')}${chip('create','＋ Додати гру в каталог')}
+            <div class="admin-tabs" aria-label="Каталог GameNest">
+    ${chip('moderation','Модерація пропозицій')}
+    ${chip('create','＋ Додати гру в каталог')}
+    ${chip('catalog','Керування іграми')}
             </div>`
 }
 function adminShell(tab,body){
@@ -954,55 +1044,186 @@ function adminShell(tab,body){
             </main>`,'admin')
 }
 const MODERATION_FILTERS=[['Pending','На розгляді'],['Approved','Схвалені'],['Rejected','Відхилені'],['','Усі']];
-let moderationFilter='Pending';
-let moderationType='';
-// Admin: moderation queue (GET /api/Submissions?status=…); type is filtered here.
-function adminModeration(){
-    const isCurrent=beginView(()=>adminModeration());
-    if(!requireAdmin())return;
-    const filter=moderationFilter,type=moderationType;
-    const render=body=>adminShell('moderation',`
-            <div class="toolbar filters" style="margin-top:18px">${MODERATION_FILTERS.map(([v,l])=>`
-            <button class="chip ${v===filter?'active':''}" data-modfilter="${v}">${l}
-            </button>`).join('')}
-            </div>
-            <div class="toolbar filters">${filterChips(SUBMISSION_TYPE_FILTERS,type,'data-modtype')}
-            </div>${body}`);
-    render(loadingBlock('Завантажуємо пропозиції…'));
-    Submissions.adminList(filter).then(all=>{
-        if(!isCurrent())return;
-        const items=all.filter(s=>!type||s.type===type);
-        render(items.length?`
-            <div class="submission-list">${items.map(s=>`
-            <article class="panel submission-item">
-            <div class="submission-head">
-            <div>
-            <h3>${esc(s.title)}
-            </h3>
-            <div class="small muted">${authorLink(s)} · ${esc(fmtDateTime(s.createdAt))} · ${esc(s.typeLabel)}
-            </div>
-            </div>${submissionStatus(s)}
-            </div>
-            <button class="btn" data-submission="${esc(s.id)}">${s.status==='Pending'?'Розглянути':'Переглянути'}
+let moderationFilter = 'Pending';
+let moderationType = '';
+let moderationPage = 1;
+
+const SUBMISSIONS_PER_PAGE = 8;
+function paginationHtml(page, total, attribute) {
+    const pages = Math.ceil(total / SUBMISSIONS_PER_PAGE);
+
+    if (pages <= 1) return '';
+
+    const start = Math.max(1, Math.min(page - 2, pages - 4));
+    const end = Math.min(pages, start + 4);
+
+    const numbers = Array.from(
+        { length: end - start + 1 },
+        (_, i) => start + i
+    );
+
+    return `
+        <nav class="pagination" aria-label="Сторінки пропозицій">
+
+            <button
+                class="page-btn"
+                ${attribute}="${Math.max(1, page - 1)}"
+                ${page === 1 ? 'disabled' : ''}
+                aria-label="Попередня сторінка">
+                ←
             </button>
-            </article>`).join('')}
-            </div>`:`
+
+            ${start > 1 ? `
+                <button class="page-btn" ${attribute}="1">1</button>
+                <span class="page-ellipsis">…</span>
+            ` : ''}
+
+            ${numbers.map(n => `
+                <button
+                    class="page-btn ${n === page ? 'active' : ''}"
+                    ${attribute}="${n}"
+                    ${n === page ? 'aria-current="page"' : ''}>
+                    ${n}
+                </button>
+            `).join('')}
+
+            ${end < pages ? `
+                <span class="page-ellipsis">…</span>
+                <button class="page-btn" ${attribute}="${pages}">
+                    ${pages}
+                </button>
+            ` : ''}
+
+            <button
+                class="page-btn"
+                ${attribute}="${Math.min(pages, page + 1)}"
+                ${page === pages ? 'disabled' : ''}
+                aria-label="Наступна сторінка">
+                →
+            </button>
+
+            <span class="pagination-count">
+                Сторінка ${page} з ${pages} · ${total} пропозицій
+            </span>
+        </nav>
+    `;
+}
+// Admin: moderation queue (GET /api/Submissions?status=…); type is filtered here.
+function adminModeration() {
+    const isCurrent = beginView(() => adminModeration());
+
+    if (!requireAdmin()) return;
+
+    const filter = moderationFilter;
+    const type = moderationType;
+
+    const render = body => adminShell('moderation', `
+        <div class="toolbar filters" style="margin-top:18px">
+            ${MODERATION_FILTERS.map(([v, l]) => `
+                <button
+                    class="chip ${v === filter ? 'active' : ''}"
+                    data-modfilter="${v}">
+                    ${l}
+                </button>
+            `).join('')}
+        </div>
+
+        <div class="toolbar filters">
+            ${filterChips(
+                SUBMISSION_TYPE_FILTERS,
+                type,
+                'data-modtype'
+            )}
+        </div>
+
+        ${body}
+    `);
+
+    render(loadingBlock('Завантажуємо пропозиції…'));
+
+    Submissions.adminList(filter).then(all => {
+        if (!isCurrent()) return;
+
+        const items = all.filter(s => !type || s.type === type);
+
+        const pageCount = Math.max(
+            1,
+            Math.ceil(items.length / SUBMISSIONS_PER_PAGE)
+        );
+
+        moderationPage = Math.min(moderationPage, pageCount);
+
+        const start = (moderationPage - 1) * SUBMISSIONS_PER_PAGE;
+
+        const pageItems = items.slice(
+            start,
+            start + SUBMISSIONS_PER_PAGE
+        );
+
+        render(items.length ? `
+            <div class="submission-list">
+                ${pageItems.map(s => `
+                    <article class="panel submission-item">
+
+                        <div class="submission-head">
+                            <div>
+                                <h3>${esc(s.title)}</h3>
+
+                                <div class="small muted">
+                                    ${authorLink(s)}
+                                    · ${esc(fmtDateTime(s.createdAt))}
+                                    · ${esc(s.typeLabel)}
+                                </div>
+                            </div>
+
+                            ${submissionStatus(s)}
+                        </div>
+
+                        <button
+                            class="btn"
+                            data-submission="${esc(s.id)}">
+                            ${s.status === 'Pending'
+                                ? 'Розглянути'
+                                : 'Переглянути'}
+                        </button>
+
+                    </article>
+                `).join('')}
+            </div>
+
+            ${paginationHtml(
+                moderationPage,
+                items.length,
+                'data-modpage'
+            )}
+
+        ` : `
             <div class="empty">
-            <h3>${filter==='Pending'&&!type?'Немає пропозицій на розгляді':'Пропозицій не знайдено'}
-            </h3>
-            </div>`)
-    }).catch(error=>{
-        if(!isCurrent())return;
-        render(errorBlock('Не вдалося завантажити пропозиції',error,'moderation-retry'))
-    })
+                <h3>
+                    ${filter === 'Pending' && !type
+                        ? 'Немає пропозицій на розгляді'
+                        : 'Пропозицій не знайдено'}
+                </h3>
+            </div>
+        `);
+
+    }).catch(error => {
+        if (!isCurrent()) return;
+
+        render(errorBlock(
+            'Не вдалося завантажити пропозиції',
+            error,
+            'moderation-retry'
+        ));
+    });
 }
 // Admin: one submission with all submitted data; edit, approve or reject while it is pending.
 function adminSubmission(id){
     const isCurrent=beginView(()=>adminSubmission(id));
     if(!requireAdmin())return;
-    const back=`
-            <button class="btn" data-admintab="moderation">← До черги модерації
-            </button>`;
+const back=`
+    <button class="btn" data-go="admin">← До черги модерації
+    </button>`;
     const render=body=>adminShell('moderation',`
             <div style="margin-top:18px">${back}
             </div>${body}`);
@@ -1026,13 +1247,33 @@ function adminSubmission(id){
 function renderAdminSubmission(s,render,isCurrent){
     const cs=Catalog.state;
     const sameTitle=s.type==='NewGame'&&cs.status==='success'&&cs.games.some(g=>g.title.toLocaleLowerCase('uk')===s.title.toLocaleLowerCase('uk'));
-    const urlRow=(label,safe,raw)=>raw?`
-            <div class="field">
-            <label>${label}
-            </label>
-            <div>${safe?`<a href="${esc(safe)}" target="_blank" rel="noopener noreferrer">${esc(safe)}</a>`:`<span class="muted">некоректна адреса, не показано</span>`}
-            </div>
-            </div>`:'';
+    const urlRow = (label, safe, raw, kind) => raw ? `
+    <div class="submission-link-row">
+
+        <div class="submission-link-copy">
+            <span class="submission-link-label">
+                ${label}
+            </span>
+
+            <span class="submission-link-url">
+                ${safe ? esc(new URL(safe).hostname) : 'Некоректне посилання'}
+            </span>
+        </div>
+
+        ${safe ? `
+            <a
+                class="btn submission-link-btn"
+                href="${esc(safe)}"
+                target="_blank"
+                rel="noopener noreferrer">
+                ${kind === 'video' ? '▶ Дивитися трейлер' : '↗ Відкрити обкладинку'}
+            </a>
+        ` : `
+            <span class="small muted">Не вдалося відкрити</span>
+        `}
+
+    </div>
+` : '';
     const facts=[['Розробник',esc(s.developer)],['Видавець',esc(s.publisher)],['Дата виходу',esc(fmtDate(s.releaseDate))],['Автор',authorLink(s)],['Подано',esc(fmtDateTime(s.createdAt))],['Тип',esc(s.typeLabel)]].filter(([,v])=>v);
     render(`
             <div class="detail-layout" style="margin-top:18px">
@@ -1062,7 +1303,7 @@ function renderAdminSubmission(s,render,isCurrent){
             </label>
             <div>${v}
             </div>
-            </div>`).join('')}${urlRow('Обкладинка',s.coverUrl,s.rawCoverUrl)}${urlRow('Трейлер',s.trailerUrl,s.rawTrailerUrl)}
+           </div>`).join('')}${urlRow('Обкладинка', s.coverUrl, s.rawCoverUrl, 'image')}${urlRow('Трейлер', s.trailerUrl, s.rawTrailerUrl, 'video')}
             <hr class="divider">${s.status==='Pending'?`
             <button class="btn" style="width:100%;margin-bottom:12px" id="editSubmission">Редагувати перед рішенням
             </button>
@@ -1151,6 +1392,80 @@ function adminCreateGame(){
         }
     })
 }
+// Admin: керування справжнім серверним каталогом.
+function adminCatalogGames() {
+    const isCurrent = beginView(() => adminCatalogGames());
+
+    if (!requireAdmin()) return;
+
+    const render = body => adminShell('catalog', body);
+
+    render(loadingBlock('Завантажуємо ігри з сервера…'));
+
+    window.GameNestCatalog.load({ force: true }).then(games => {
+        if (!isCurrent()) return;
+
+        const state = window.GameNestCatalog.state;
+
+        if (state.status === 'error') {
+            render(errorBlock(
+                'Не вдалося завантажити каталог',
+                state.error,
+                'admin-catalog-retry'
+            ));
+            return;
+        }
+
+        render(games.length ? `
+            <section class="panel" style="margin-top:18px">
+                <div class="section-head">
+                    <div>
+                        <h2>Серверний каталог</h2>
+                        <p class="muted small">
+                            Усього ігор: ${games.length}
+                        </p>
+                    </div>
+                </div>
+
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Назва гри</th>
+                                <th>Розробник</th>
+                                <th>Видавець</th>
+                                <th>Дії</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${games.map(g => `
+                                <tr>
+                                    <td>${g.id}</td>
+                                    <td><b>${esc(g.title)}</b></td>
+                                    <td>${esc(g.developer || '—')}</td>
+                                    <td>${esc(g.publisher || '—')}</td>
+                                    <td>
+                                        <button
+                                            class="btn danger"
+                                            data-archive-game="${g.id}">
+                                            Архівувати
+                                        </button>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        ` : `
+            <div class="empty">
+                <h3>Каталог порожній</h3>
+                <p>На сервері поки немає активних ігор.</p>
+            </div>
+        `);
+    });
+}
 // Admin: edit a catalog game (PUT /api/Games/{id}). The game keeps its game title, so its versions stay grouped.
 function adminEditGame(id){
     const isCurrent=beginView(()=>adminEditGame(id));
@@ -1189,9 +1504,18 @@ function adminEditGame(id){
         render(errorBlock('Не вдалося завантажити гру',error))
     })
 }
-function adminPage(tab='moderation'){
-    if(tab==='create')adminCreateGame();
-    else adminModeration()
+function adminPage(tab = 'moderation') {
+    if (tab === 'create') {
+        adminCreateGame();
+        return;
+    }
+
+    if (tab === 'catalog') {
+        adminCatalogGames();
+        return;
+    }
+
+    adminModeration();
 }
 
 // ---------- Sign-in (Google only: password sign-in is switched off on the server for the MVP) ----------
@@ -1800,20 +2124,118 @@ function publicProfile(username){
 }
 
 // ---------- Navigation ----------
-function go(page,arg){
-    if(page==='discover')discover();
-    else if(page==='auth')auth();
-    else if(page==='library')libraryPage();
-    else if(page==='mygames')myGames();
-    else if(page==='profile')profile();
-    else if(page==='admin')adminPage();
-    else if(page==='settings')settings();
-    else if(page==='game')apiDetail(arg);
-    else if(page==='submit')submitGame();
-    else if(page==='submissions')mySubmissions();
-    else if(page==='user')publicProfile(arg);
-    else discover()
+// Перетворює назву сторінки на URL.
+function routeUrl(page, arg) {
+    if (page === 'home') return '/';
+    if (page === 'discover') return '/catalog';
+    if (page === 'library') return '/library';
+    if (page === 'profile') return '/profile';
+    if (page === 'admin') {
+    const tab = ['moderation', 'create', 'catalog'].includes(arg)
+        ? arg
+        : 'moderation';
+
+    return `/admin/${tab}`;
 }
+
+if (page === 'adminSubmission') {
+    return `/admin/submissions/${encodeURIComponent(arg)}`;
+}
+    if (page === 'game') return `/game/${encodeURIComponent(arg)}`;
+    if (page === 'user') return `/user/${encodeURIComponent(arg)}`;
+    if (page === 'auth') return '/login';
+    if (page === 'submit') return '/submit';
+    if (page === 'submissions') return '/submissions';
+    if (page === 'mygames') return '/my-games';
+    if (page === 'settings') return '/settings';
+
+    return '/';
+}
+
+// Відображає сторінку відповідно до маршруту.
+function renderRoute(page, arg) {
+    if (page === 'home') home();
+    else if (page === 'discover') discover();
+    else if (page === 'auth') auth();
+    else if (page === 'library') libraryPage();
+    else if (page === 'mygames') myGames();
+    else if (page === 'profile') profile();
+    else if (page === 'admin') adminPage(arg);
+else if (page === 'adminSubmission') adminSubmission(arg);
+    else if (page === 'settings') settings();
+    else if (page === 'game') apiDetail(arg);
+    else if (page === 'submit') submitGame();
+    else if (page === 'submissions') mySubmissions();
+    else if (page === 'user') publicProfile(arg);
+    else home();
+}
+
+// Перехід на сторінку з оновленням адреси браузера.
+function go(page, arg) {
+    const url = routeUrl(page, arg);
+
+    if (window.location.pathname !== url) {
+        window.history.pushState(
+            { page, arg },
+            '',
+            url
+        );
+    }
+
+    renderRoute(page, arg);
+}
+
+// Відновлює сторінку за поточною адресою.
+function openCurrentRoute() {
+    const path = decodeURIComponent(window.location.pathname);
+    const parts = path.split('/').filter(Boolean);
+
+    if (parts.length === 0) {
+        renderRoute('home');
+    } else if (path === '/catalog') {
+        renderRoute('discover');
+    } else if (path === '/library') {
+        renderRoute('library');
+    } else if (path === '/profile') {
+        renderRoute('profile');
+} else if (parts[0] === 'admin' && parts.length === 1) {
+    renderRoute('admin', 'moderation');
+} else if (
+    parts[0] === 'admin' &&
+    ['moderation', 'create', 'catalog'].includes(parts[1]) &&
+    parts.length === 2
+) {
+    renderRoute('admin', parts[1]);
+} else if (
+    parts[0] === 'admin' &&
+    parts[1] === 'submissions' &&
+    parts[2] &&
+    parts.length === 3
+) {
+    renderRoute('adminSubmission', parts[2]);
+    } else if (path === '/login') {
+        renderRoute('auth');
+    } else if (path === '/submit') {
+        renderRoute('submit');
+    } else if (path === '/submissions') {
+        renderRoute('submissions');
+    } else if (path === '/my-games') {
+        renderRoute('mygames');
+    } else if (path === '/settings') {
+        renderRoute('settings');
+    } else if (parts[0] === 'game' && parts[1]) {
+        renderRoute('game', parts[1]);
+    } else if (parts[0] === 'user' && parts[1]) {
+        renderRoute('user', parts[1]);
+    } else {
+        renderRoute('home');
+    }
+}
+
+// Кнопки «Назад» і «Вперед» браузера.
+window.addEventListener('popstate', () => {
+    openCurrentRoute();
+});
 function bind(){
     $$('[data-go]').forEach(b=>b.addEventListener('click',e=>{
         e.preventDefault();
@@ -1822,24 +2244,51 @@ function bind(){
     $$('[data-action="logout"]').forEach(b=>b.addEventListener('click',()=>{
         session.signOut();
         toast('Ти вийшов з акаунта.');
-        discover()
+        go('discover');
     }));
     $$('[data-action="retry-profile"]').forEach(b=>b.addEventListener('click',()=>session.reloadProfile()));
-    $$('[data-submission]').forEach(b=>b.addEventListener('click',()=>{
-        const id=Number(b.dataset.submission);
-        if(Number.isInteger(id)&&id>0)adminSubmission(id)
-    }));
-    $$('[data-modfilter]').forEach(b=>b.addEventListener('click',()=>{
-        moderationFilter=b.dataset.modfilter;
-        adminModeration()
-    }));
-    $$('[data-modtype]').forEach(b=>b.addEventListener('click',()=>{
-        moderationType=b.dataset.modtype;
-        adminModeration()
-    }));
-    $$('[data-user]').forEach(b=>b.addEventListener('click',()=>{
-        if(b.dataset.user)publicProfile(b.dataset.user)
-    }));
+$$('[data-submission]').forEach(b =>
+    b.addEventListener('click', () => {
+        const id = Number(b.dataset.submission);
+
+        if (Number.isInteger(id) && id > 0) {
+            go('adminSubmission', id);
+        }
+    })
+);
+    $$('[data-modfilter]').forEach(b =>
+    b.addEventListener('click', () => {
+        moderationFilter = b.dataset.modfilter;
+        moderationPage = 1;
+        adminModeration();
+    })
+);
+
+$$('[data-modtype]').forEach(b =>
+    b.addEventListener('click', () => {
+        moderationType = b.dataset.modtype;
+        moderationPage = 1;
+        adminModeration();
+    })
+);
+
+$$('[data-modpage]').forEach(b =>
+    b.addEventListener('click', () => {
+        const page = Number(b.dataset.modpage);
+
+        if (Number.isInteger(page) && page > 0) {
+            moderationPage = page;
+            adminModeration();
+        }
+    })
+);
+    $$('[data-user]').forEach(b =>
+    b.addEventListener('click', () => {
+        if (b.dataset.user) {
+            go('user', b.dataset.user);
+        }
+    })
+);
     $$('[data-action="submissions-retry"]').forEach(b=>b.addEventListener('click',()=>mySubmissions()));
     $$('[data-action="moderation-retry"]').forEach(b=>b.addEventListener('click',()=>adminModeration()));
     $$('[data-action="submission-retry"]').forEach(b=>b.addEventListener('click',()=>rerender()));
@@ -1849,7 +2298,48 @@ function bind(){
     $$('[data-api-game]').filter(b=>!b.closest('#gameGrid')).forEach(b=>b.addEventListener('click',()=>openApiGame(b)));
     $$('img[data-cover]').filter(img=>!img.closest('#gameGrid')).forEach(img=>img.addEventListener('error',()=>onCoverError(img),{once:true}));
     $$('[data-scroll]').forEach(b=>b.addEventListener('click',()=>document.getElementById(b.dataset.scroll)?.scrollIntoView({behavior:'smooth'})));
-    $$('[data-admintab]').forEach(b=>b.addEventListener('click',()=>adminPage(b.dataset.admintab)));
+$$('[data-admintab]').forEach(b =>
+    b.addEventListener('click', () => {
+        go('admin', b.dataset.admintab);
+    })
+);
+    $$('[data-archive-game]').forEach(button => {
+    button.addEventListener('click', async () => {
+        const id = Number(button.dataset.archiveGame);
+
+        const game = window.GameNestCatalog.state.games
+            .find(g => g.id === id);
+
+        if (!game) return;
+
+        if (!confirm(`Архівувати гру «${game.title}»?`)) {
+            return;
+        }
+
+        button.disabled = true;
+        button.textContent = 'Архівуємо…';
+
+        try {
+            await window.GameNestSubmissions.archiveGame(id);
+
+            await window.GameNestCatalog.load({ force: true });
+
+            toast('Гру успішно архівовано.');
+
+            adminCatalogGames();
+        } catch (error) {
+            button.disabled = false;
+            button.textContent = 'Архівувати';
+
+            toast(window.GameNestApi.describeError(error));
+        }
+    });
+});
+
+$$('[data-action="admin-catalog-retry"]')
+    .forEach(button => button.addEventListener('click', () => {
+        adminCatalogGames();
+    }));
     runHealthChecks()
 }
 // Every session change (sign-in, profile loaded, 401, sign-out) re-renders the current page;
@@ -1873,7 +2363,10 @@ Library.subscribe(()=>{
     else if($('main[data-page="library"]'))libraryPage();
     else if($('main[data-page="profile"]')&&$('#statLibrary')&&Library.state.status==='success')$('#statLibrary').textContent=Library.state.items.length
 });
-discover();
-if(session.hasToken())session.restore();
+openCurrentRoute();
+
+if (session.hasToken()) {
+    session.restore();
+}
 }
 )();

@@ -372,10 +372,70 @@ h3 {
     min-width: 0;
 }
 
+
+.game-card {
+    position: relative;
+}
+
 .game-card:hover {
     transform: translateY(-3px);
     box-shadow: var(--shadow);
 }
+
+.game-preview {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 20px;
+    background: rgba(36, 33, 35, 0.96);
+    color: white;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(10px);
+    transition: opacity .25s ease, transform .25s ease,
+                visibility .25s ease;
+    pointer-events: none;
+}
+
+.game-card:hover .game-preview,
+.game-card:focus-within .game-preview {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+.game-preview h3 {
+    color: #f28a48;
+    font-size: 19px;
+    margin-bottom: 14px;
+}
+
+.game-preview p {
+    font-size: 13px;
+    line-height: 1.6;
+    margin-bottom: 9px;
+    color: #eee5df;
+}
+
+.game-preview .preview-description {
+    display: -webkit-box;
+    -webkit-line-clamp: 5;
+    line-clamp: 5;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    margin-top: 8px;
+}
+
+.game-preview .preview-hint {
+    margin-top: auto;
+    padding-top: 12px;
+    font-size: 11px;
+    color: #f28a48;
+}
+
 
 .poster {
     height: 155px;
@@ -1282,5 +1342,107 @@ button.user-pill {
     .sidebar,
     .side-nav {
         min-width: 0;
+    }
+}
+
+/* Пагінація модерації */
+
+.pagination {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 7px;
+    margin: 22px 0 8px;
+}
+
+.page-btn {
+    min-width: 36px;
+    height: 36px;
+    padding: 0 10px;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    background: var(--card);
+    color: var(--ink);
+    font-size: 13px;
+    font-weight: 700;
+    transition: .18s;
+}
+
+.page-btn:hover:not(:disabled) {
+    border-color: var(--orange);
+    color: var(--orange);
+}
+
+.page-btn.active {
+    border-color: var(--nav);
+    background: var(--nav);
+    color: #fff;
+}
+
+.page-btn:disabled {
+    opacity: .4;
+    cursor: not-allowed;
+}
+
+.page-ellipsis {
+    color: var(--muted);
+    padding: 0 2px;
+}
+
+.pagination-count {
+    flex-basis: 100%;
+    text-align: center;
+    color: var(--muted);
+    font-size: 11px;
+    margin-top: 3px;
+}
+
+
+/* Посилання в деталях пропозицій */
+
+.submission-link-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-width: 0;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--line);
+}
+
+.submission-link-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.submission-link-label {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--ink);
+}
+
+.submission-link-url {
+    max-width: 100%;
+    overflow: hidden;
+    color: var(--muted);
+    font-size: 11px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.submission-link-btn {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    padding: 9px 11px;
+    font-size: 11px;
+}
+
+@media (max-width: 420px) {
+    .submission-link-row {
+        align-items: flex-start;
+        flex-direction: column;
     }
 }
