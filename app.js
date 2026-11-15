@@ -9,7 +9,7 @@
     const Profile = window.GameNestProfile;
     const Submissions = window.GameNestSubmissions;
     // All data comes from the GameNest API. The only thing stored in the browser is the JWT (localStorage, session.js).
-    let rerender = () => discover();
+    let rerender = () => home();
 
 function esc(v=''){
     return String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))
@@ -54,28 +54,42 @@ function sessionControls(u){
             <button class="login" data-go="auth">Увійти через Google
             </button>`
 }
-function header(active='discover'){
-    const u=me();
+function header(active = 'home') {
+    const u = me();
+
     return `
-            <header class="topbar">
-            <a class="brand" href="#" data-go="discover">
-            <img src="assets/gamenest-logo.png" alt="GameNest">
-            <div>Game
-            <span>Nest
-            </span>
-            </div>
+        <header class="topbar">
+            <a class="brand" href="#" data-go="home">
+                <img src="assets/gamenest-logo.png" alt="GameNest">
+                <div>Game<span>Nest</span></div>
             </a>
+
             <nav class="nav">
-            <button data-go="discover" class="${active==='discover'?'active':''}">⌕ &nbsp;Каталог
-            </button>
-            <button data-go="library" class="${active==='library'?'active':''}">▣ &nbsp;Моя бібліотека
-            </button>
-            <button data-go="profile" class="${active==='profile'?'active':''}">☆ &nbsp;Кабінет
-            </button>${u&&u.isAdmin?`
-            <button data-go="admin" class="${active==='admin'?'active':''}">⚙ &nbsp;Адмінпанель
-            </button>`:''}${sessionControls(u)}
+                <button data-go="home" class="${active === 'home' ? 'active' : ''}">
+                    ⌂ &nbsp;Головна
+                </button>
+
+                <button data-go="discover" class="${active === 'discover' ? 'active' : ''}">
+                    ⌕ &nbsp;Каталог
+                </button>
+
+                <button data-go="library" class="${active === 'library' ? 'active' : ''}">
+                    ▣ &nbsp;Моя бібліотека
+                </button>
+
+                <button data-go="profile" class="${active === 'profile' ? 'active' : ''}">
+                    ☆ &nbsp;Кабінет
+                </button>
+
+                ${u && u.isAdmin ? `
+                    <button data-go="admin" class="${active === 'admin' ? 'active' : ''}">
+                        ⚙ &nbsp;Адмінпанель
+                    </button>
+                ` : ''}
+
+                ${sessionControls(u)}
             </nav>
-            </header>`
+        </header>`;
 }
 function layout(content,active){
     $('#app').innerHTML=`
@@ -293,69 +307,116 @@ function catalogCount(){
     const cs=Catalog.state;
     return cs.status==='success'?pluralGames(cs.games.length):cs.status==='error'?'Недоступно':'Завантаження…'
 }
-function discover(){
-    rerender=()=>discover();
-    const cs=Catalog.state;
-    const ready=cs.status==='success'&&cs.games.length>0;
-    const content=`
-            <main class="container" data-page="discover">
+// ---------- Головна сторінка ----------
+function home() {
+    rerender = () => home();
+
+    const content = `
+        <main class="container" data-page="home">
             <section class="hero">
-            <div>
-            <div class="eyebrow">Твій особистий ігровий простір
-            </div>
-            <h1>Твої ігри.
-            <br>
-            <span class="accent">Твоя подорож.
-            </span>
-            </h1>
-            <p>Збирай ігрову бібліотеку, впорядковуй колекцію та відкривай, у що пограти далі. Статуси проходження ти контролюєш самостійно.
-            </p>
-            <div class="hero-actions">
-            <button class="btn primary" data-scroll="catalog">Переглянути каталог&nbsp; →
-            </button>
-            <button class="btn" data-go="library">Моя бібліотека
-            </button>
-            </div>
-            </div>
-            <div class="hero-art">
-            <img src="assets/gamenest-logo.png" alt="">
-            </div>
+                <div>
+                    <div class="eyebrow">Твій особистий ігровий простір</div>
+
+                    <h1>
+                        Твої ігри.
+                        <br>
+                        <span class="accent">Твоя подорож.</span>
+                    </h1>
+
+                    <p>
+                        Збирай ігрову бібліотеку, впорядковуй колекцію
+                        та відкривай, у що пограти далі.
+                        Статуси проходження ти контролюєш самостійно.
+                    </p>
+
+                    <div class="hero-actions">
+                        <button class="btn primary" data-go="discover">
+                            Переглянути каталог →
+                        </button>
+
+                        <button class="btn" data-go="library">
+                            Моя бібліотека
+                        </button>
+                    </div>
+                </div>
+
+                <div class="hero-art">
+                    <img src="assets/gamenest-logo.png" alt="GameNest">
+                </div>
             </section>
-            <div class="section-head" id="catalog">
-            <div>
-            <div class="eyebrow">Вибирай наступну пригоду
+        </main>`;
+
+    layout(content, 'home');
+}
+
+// ---------- Каталог ігор ----------
+function discover() {
+    rerender = () => discover();
+
+    const cs = Catalog.state;
+    const ready = cs.status === 'success' && cs.games.length > 0;
+
+    const content = `
+        <main class="container" data-page="discover">
+            <div class="section-head">
+                <div>
+                    <div class="eyebrow">Вибирай наступну пригоду</div>
+                    <h1 style="font-size:36px">Каталог ігор</h1>
+                    <p class="muted small">
+                        Знайди гру за назвою, розробником, видавцем або описом.
+                    </p>
+                </div>
+
+                <div class="row-actions">
+                    <span class="status" id="catalogCount">${catalogCount()}</span>
+                    <button class="btn primary" data-go="submit">
+                        ＋ Запропонувати гру
+                    </button>
+                </div>
             </div>
-            <h2>Каталог ігор
-            </h2>
-            <p class="muted small">Знайди гру за назвою, розробником, видавцем або описом.
-            </p>
+
+            ${ready ? `
+                <div class="toolbar">
+                    <input
+                        class="search"
+                        id="gameSearch"
+                        type="search"
+                        placeholder="⌕ Пошук ігор..."
+                        aria-label="Пошук ігор"
+                        value="${esc(catalogView.search)}">
+
+                    <select class="search" id="gameSort" aria-label="Сортування за назвою">
+                        <option value="asc" ${catalogView.sort === 'asc' ? 'selected' : ''}>
+                            Назва: А → Я
+                        </option>
+                        <option value="desc" ${catalogView.sort === 'desc' ? 'selected' : ''}>
+                            Назва: Я → А
+                        </option>
+                    </select>
+
+                    <button class="btn" id="resetFilters" type="button">
+                        Скинути
+                    </button>
+                </div>
+            ` : ''}
+
+            <div class="grid" id="gameGrid">
+                ${catalogResults()}
             </div>
-            <div class="row-actions">
-            <span class="status" id="catalogCount">${catalogCount()}
-            </span>
-            <button class="btn primary" data-go="submit">＋ Запропонувати гру
-            </button>
-            </div>
-            </div>${ready?`
-        <div class="toolbar">
-            <input class="search" id="gameSearch" type="search" placeholder="⌕ Пошук ігор..." aria-label="Пошук ігор" value="${esc(catalogView.search)}">
-            <select class="search" id="gameSort" aria-label="Сортування за назвою">
-                <option value="asc" ${catalogView.sort==='asc'?'selected':''}>Назва: А → Я</option>
-                <option value="desc" ${catalogView.sort==='desc'?'selected':''}>Назва: Я → А</option>
-            </select>
-            <button class="btn" id="resetFilters" type="button">Скинути</button>
-        </div>`:''}
-            <div class="grid" id="gameGrid">${catalogResults()}
-            </div>
-            </main>`;
-    layout(content,'discover');
+        </main>`;
+
+    layout(content, 'discover');
     bindCatalogControls();
     bindCatalogGrid();
-    if(cs.status==='idle')Catalog.load();
+
+    if (cs.status === 'idle') Catalog.load();
 }
-function openApiGame(el){
-    const id=Number(el.dataset.apiGame);
-    if(Number.isInteger(id)&&id>0)apiDetail(id)
+function openApiGame(el) {
+    const id = Number(el.dataset.apiGame);
+
+    if (Number.isInteger(id) && id > 0) {
+        go('game', id);
+    }
 }
 // A broken cover image falls back to the gradient placeholder underneath it.
 function onCoverError(img){
@@ -618,7 +679,7 @@ function bindLibraryPanel(g){
     const box=$('#libraryPanel');
     if(!box)return;
     box.querySelector('#libSignIn')?.addEventListener('click',()=>{
-        afterSignIn=()=>apiDetail(g.id);
+        afterSignIn = () => go('game', g.id);
         auth()
     });
     box.querySelector('[data-action="library-retry"]')?.addEventListener('click',()=>Library.load({force:true}));
@@ -847,12 +908,14 @@ function submissionForm(opts={mode:'new'}){
         onError:error=>{
             if(mode==='edit'&&error.status===409){
                 toast(describe(error));
-                opts.admin?adminSubmission(opts.submission.id):mySubmissions();
+                opts.admin?go('adminSubmission', opts.submission.id):mySubmissions();
                 return true
             }
             return false
         },
-        onSuccess:result=>mode==='edit'&&opts.admin?adminSubmission(result?.id??opts.submission.id):mySubmissions()
+        onSuccess: result => mode === 'edit' && opts.admin
+    ? go('adminSubmission', result?.id ?? opts.submission.id)
+    : mySubmissions()
     })
 }
 function submitGame(){
@@ -1158,9 +1221,9 @@ function adminModeration() {
 function adminSubmission(id){
     const isCurrent=beginView(()=>adminSubmission(id));
     if(!requireAdmin())return;
-    const back=`
-            <button class="btn" data-admintab="moderation">← До черги модерації
-            </button>`;
+const back=`
+    <button class="btn" data-go="admin">← До черги модерації
+    </button>`;
     const render=body=>adminShell('moderation',`
             <div style="margin-top:18px">${back}
             </div>${body}`);
@@ -2061,20 +2124,118 @@ function publicProfile(username){
 }
 
 // ---------- Navigation ----------
-function go(page,arg){
-    if(page==='discover')discover();
-    else if(page==='auth')auth();
-    else if(page==='library')libraryPage();
-    else if(page==='mygames')myGames();
-    else if(page==='profile')profile();
-    else if(page==='admin')adminPage();
-    else if(page==='settings')settings();
-    else if(page==='game')apiDetail(arg);
-    else if(page==='submit')submitGame();
-    else if(page==='submissions')mySubmissions();
-    else if(page==='user')publicProfile(arg);
-    else discover()
+// Перетворює назву сторінки на URL.
+function routeUrl(page, arg) {
+    if (page === 'home') return '/';
+    if (page === 'discover') return '/catalog';
+    if (page === 'library') return '/library';
+    if (page === 'profile') return '/profile';
+    if (page === 'admin') {
+    const tab = ['moderation', 'create', 'catalog'].includes(arg)
+        ? arg
+        : 'moderation';
+
+    return `/admin/${tab}`;
 }
+
+if (page === 'adminSubmission') {
+    return `/admin/submissions/${encodeURIComponent(arg)}`;
+}
+    if (page === 'game') return `/game/${encodeURIComponent(arg)}`;
+    if (page === 'user') return `/user/${encodeURIComponent(arg)}`;
+    if (page === 'auth') return '/login';
+    if (page === 'submit') return '/submit';
+    if (page === 'submissions') return '/submissions';
+    if (page === 'mygames') return '/my-games';
+    if (page === 'settings') return '/settings';
+
+    return '/';
+}
+
+// Відображає сторінку відповідно до маршруту.
+function renderRoute(page, arg) {
+    if (page === 'home') home();
+    else if (page === 'discover') discover();
+    else if (page === 'auth') auth();
+    else if (page === 'library') libraryPage();
+    else if (page === 'mygames') myGames();
+    else if (page === 'profile') profile();
+    else if (page === 'admin') adminPage(arg);
+else if (page === 'adminSubmission') adminSubmission(arg);
+    else if (page === 'settings') settings();
+    else if (page === 'game') apiDetail(arg);
+    else if (page === 'submit') submitGame();
+    else if (page === 'submissions') mySubmissions();
+    else if (page === 'user') publicProfile(arg);
+    else home();
+}
+
+// Перехід на сторінку з оновленням адреси браузера.
+function go(page, arg) {
+    const url = routeUrl(page, arg);
+
+    if (window.location.pathname !== url) {
+        window.history.pushState(
+            { page, arg },
+            '',
+            url
+        );
+    }
+
+    renderRoute(page, arg);
+}
+
+// Відновлює сторінку за поточною адресою.
+function openCurrentRoute() {
+    const path = decodeURIComponent(window.location.pathname);
+    const parts = path.split('/').filter(Boolean);
+
+    if (parts.length === 0) {
+        renderRoute('home');
+    } else if (path === '/catalog') {
+        renderRoute('discover');
+    } else if (path === '/library') {
+        renderRoute('library');
+    } else if (path === '/profile') {
+        renderRoute('profile');
+} else if (parts[0] === 'admin' && parts.length === 1) {
+    renderRoute('admin', 'moderation');
+} else if (
+    parts[0] === 'admin' &&
+    ['moderation', 'create', 'catalog'].includes(parts[1]) &&
+    parts.length === 2
+) {
+    renderRoute('admin', parts[1]);
+} else if (
+    parts[0] === 'admin' &&
+    parts[1] === 'submissions' &&
+    parts[2] &&
+    parts.length === 3
+) {
+    renderRoute('adminSubmission', parts[2]);
+    } else if (path === '/login') {
+        renderRoute('auth');
+    } else if (path === '/submit') {
+        renderRoute('submit');
+    } else if (path === '/submissions') {
+        renderRoute('submissions');
+    } else if (path === '/my-games') {
+        renderRoute('mygames');
+    } else if (path === '/settings') {
+        renderRoute('settings');
+    } else if (parts[0] === 'game' && parts[1]) {
+        renderRoute('game', parts[1]);
+    } else if (parts[0] === 'user' && parts[1]) {
+        renderRoute('user', parts[1]);
+    } else {
+        renderRoute('home');
+    }
+}
+
+// Кнопки «Назад» і «Вперед» браузера.
+window.addEventListener('popstate', () => {
+    openCurrentRoute();
+});
 function bind(){
     $$('[data-go]').forEach(b=>b.addEventListener('click',e=>{
         e.preventDefault();
@@ -2083,13 +2244,18 @@ function bind(){
     $$('[data-action="logout"]').forEach(b=>b.addEventListener('click',()=>{
         session.signOut();
         toast('Ти вийшов з акаунта.');
-        discover()
+        go('discover');
     }));
     $$('[data-action="retry-profile"]').forEach(b=>b.addEventListener('click',()=>session.reloadProfile()));
-    $$('[data-submission]').forEach(b=>b.addEventListener('click',()=>{
-        const id=Number(b.dataset.submission);
-        if(Number.isInteger(id)&&id>0)adminSubmission(id)
-    }));
+$$('[data-submission]').forEach(b =>
+    b.addEventListener('click', () => {
+        const id = Number(b.dataset.submission);
+
+        if (Number.isInteger(id) && id > 0) {
+            go('adminSubmission', id);
+        }
+    })
+);
     $$('[data-modfilter]').forEach(b =>
     b.addEventListener('click', () => {
         moderationFilter = b.dataset.modfilter;
@@ -2116,9 +2282,13 @@ $$('[data-modpage]').forEach(b =>
         }
     })
 );
-    $$('[data-user]').forEach(b=>b.addEventListener('click',()=>{
-        if(b.dataset.user)publicProfile(b.dataset.user)
-    }));
+    $$('[data-user]').forEach(b =>
+    b.addEventListener('click', () => {
+        if (b.dataset.user) {
+            go('user', b.dataset.user);
+        }
+    })
+);
     $$('[data-action="submissions-retry"]').forEach(b=>b.addEventListener('click',()=>mySubmissions()));
     $$('[data-action="moderation-retry"]').forEach(b=>b.addEventListener('click',()=>adminModeration()));
     $$('[data-action="submission-retry"]').forEach(b=>b.addEventListener('click',()=>rerender()));
@@ -2128,7 +2298,11 @@ $$('[data-modpage]').forEach(b =>
     $$('[data-api-game]').filter(b=>!b.closest('#gameGrid')).forEach(b=>b.addEventListener('click',()=>openApiGame(b)));
     $$('img[data-cover]').filter(img=>!img.closest('#gameGrid')).forEach(img=>img.addEventListener('error',()=>onCoverError(img),{once:true}));
     $$('[data-scroll]').forEach(b=>b.addEventListener('click',()=>document.getElementById(b.dataset.scroll)?.scrollIntoView({behavior:'smooth'})));
-    $$('[data-admintab]').forEach(b=>b.addEventListener('click',()=>adminPage(b.dataset.admintab)));
+$$('[data-admintab]').forEach(b =>
+    b.addEventListener('click', () => {
+        go('admin', b.dataset.admintab);
+    })
+);
     $$('[data-archive-game]').forEach(button => {
     button.addEventListener('click', async () => {
         const id = Number(button.dataset.archiveGame);
@@ -2189,7 +2363,10 @@ Library.subscribe(()=>{
     else if($('main[data-page="library"]'))libraryPage();
     else if($('main[data-page="profile"]')&&$('#statLibrary')&&Library.state.status==='success')$('#statLibrary').textContent=Library.state.items.length
 });
-discover();
-if(session.hasToken())session.restore();
+openCurrentRoute();
+
+if (session.hasToken()) {
+    session.restore();
+}
 }
 )();
