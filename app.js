@@ -60,7 +60,7 @@ function header(active = 'home') {
     return `
         <header class="topbar">
             <a class="brand" href="#" data-go="home">
-                <img src="assets/gamenest-logo.png" alt="GameNest">
+                <img src="/assets/gamenest-logo.png" alt="GameNest">
                 <div>Game<span>Nest</span></div>
             </a>
 
@@ -221,7 +221,8 @@ function catalogLibraryAction(g){
                     <button class="icon-btn" data-lib-add="${esc(g.id)}" title="Додати до бібліотеки" aria-label="Додати «${esc(g.title)}» до бібліотеки">＋
                     </button>`
 }
-function apiGameCard(g){
+
+function apiGameCard(g) {
     return `
         <article class="game-card" aria-label="Гра ${esc(g.title)}">
             ${apiPoster(g)}
@@ -230,24 +231,29 @@ function apiGameCard(g){
                 <div class="card-title-row">
                     <div>
                         <h3>${esc(g.title)}</h3>
-                        <div class="small muted">${apiGameMeta(g)||'&nbsp;'}</div>
+                        <div class="small muted">
+                            ${apiGameMeta(g) || '&nbsp;'}
+                        </div>
                     </div>
                 </div>
 
-                ${g.publisher?`
-                <div class="tag-row">
-                    <span class="tag">${esc(g.publisher)}</span>
-                </div>`:''}
+                ${g.publisher ? `
+                    <div class="tag-row">
+                        <span class="tag">${esc(g.publisher)}</span>
+                    </div>
+                ` : ''}
 
                 <div class="card-bottom">
-                    <button class="btn" data-api-game="${esc(g.id)}"
+                    <button class="btn"
+                        data-api-game="${esc(g.id)}"
                         aria-label="Детальніше про гру ${esc(g.title)}">
                         Детальніше
-                    </button>${catalogLibraryAction(g)}
+                    </button>
+                    ${catalogLibraryAction(g)}
                 </div>
             </div>
 
-            <div class="game-preview" aria-hidden="true">
+            <div class="game-card-preview">
                 <h3>${esc(g.title)}</h3>
 
                 ${g.developer ? `
@@ -258,14 +264,22 @@ function apiGameCard(g){
                     <p><b>Видавець:</b> ${esc(g.publisher)}</p>
                 ` : ''}
 
-                <p class="preview-description">
+                ${g.releaseYear ? `
+                    <p><b>Рік виходу:</b> ${esc(g.releaseYear)}</p>
+                ` : ''}
+
+                <p class="game-card-preview-description">
                     ${esc(g.description || 'Опис гри поки відсутній.')}
                 </p>
 
-                <span class="preview-hint">Натисни «Детальніше», щоб переглянути гру</span>
+                <span class="game-card-preview-hint">
+                    Натисни «Детальніше», щоб відкрити сторінку гри
+                </span>
             </div>
-        </article>`;
+        </article>
+    `;
 }
+
 
 function catalogResults(){
     const cs=Catalog.state;
@@ -341,7 +355,7 @@ function home() {
                 </div>
 
                 <div class="hero-art">
-                    <img src="assets/gamenest-logo.png" alt="GameNest">
+                    <img src="/assets/gamenest-logo.png" alt="GameNest">
                 </div>
             </section>
         </main>`;
@@ -1533,7 +1547,7 @@ function auth(){
             <main class="auth-wrap">
             <section class="auth-card">
             <div class="auth-brand">
-            <img src="assets/gamenest-logo.png" alt="">
+            <img src="/assets/gamenest-logo.png" alt="">
             <div class="eyebrow">Ласкаво просимо до GameNest
             </div>
             <h2>Увійди або створи акаунт
@@ -1613,6 +1627,25 @@ function libraryCard(item){
                     <button class="btn danger" data-lib-remove="${esc(item.gameId)}" title="Прибрати з бібліотеки">Прибрати</button>
                 </div>
             </div>
+            <div class="game-card-preview">
+    <h3>${esc(g.title)}</h3>
+
+    ${g.developer ? `
+        <p><b>Розробник:</b> ${esc(g.developer)}</p>
+    ` : ''}
+
+    ${g.publisher ? `
+        <p><b>Видавець:</b> ${esc(g.publisher)}</p>
+    ` : ''}
+
+    <p class="game-card-preview-description">
+        ${esc(g.description || 'Опис гри поки відсутній.')}
+    </p>
+
+    <span class="game-card-preview-hint">
+        Переглянь детальну інформацію про гру
+    </span>
+</div>
         </article>`
 }
 function libraryPage(){
