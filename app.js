@@ -981,47 +981,178 @@ function adminShell(tab,body){
             </main>`,'admin')
 }
 const MODERATION_FILTERS=[['Pending','На розгляді'],['Approved','Схвалені'],['Rejected','Відхилені'],['','Усі']];
-let moderationFilter='Pending';
-let moderationType='';
-// Admin: moderation queue (GET /api/Submissions?status=…); type is filtered here.
-function adminModeration(){
-    const isCurrent=beginView(()=>adminModeration());
-    if(!requireAdmin())return;
-    const filter=moderationFilter,type=moderationType;
-    const render=body=>adminShell('moderation',`
-            <div class="toolbar filters" style="margin-top:18px">${MODERATION_FILTERS.map(([v,l])=>`
-            <button class="chip ${v===filter?'active':''}" data-modfilter="${v}">${l}
-            </button>`).join('')}
-            </div>
-            <div class="toolbar filters">${filterChips(SUBMISSION_TYPE_FILTERS,type,'data-modtype')}
-            </div>${body}`);
-    render(loadingBlock('Завантажуємо пропозиції…'));
-    Submissions.adminList(filter).then(all=>{
-        if(!isCurrent())return;
-        const items=all.filter(s=>!type||s.type===type);
-        render(items.length?`
-            <div class="submission-list">${items.map(s=>`
-            <article class="panel submission-item">
-            <div class="submission-head">
-            <div>
-            <h3>${esc(s.title)}
-            </h3>
-            <div class="small muted">${authorLink(s)} · ${esc(fmtDateTime(s.createdAt))} · ${esc(s.typeLabel)}
-            </div>
-            </div>${submissionStatus(s)}
-            </div>
-            <button class="btn" data-submission="${esc(s.id)}">${s.status==='Pending'?'Розглянути':'Переглянути'}
+let moderationFilter = 'Pending';
+let moderationType = '';
+let moderationPage = 1;
+
+const SUBMISSIONS_PER_PAGE = 8;
+function paginationHtml(page, total, attribute) {
+    const pages = Math.ceil(total / SUBMISSIONS_PER_PAGE);
+
+    if (pages <= 1) return '';
+
+    const start = Math.max(1, Math.min(page - 2, pages - 4));
+    const end = Math.min(pages, start + 4);
+
+    const numbers = Array.from(
+        { length: end - start + 1 },
+        (_, i) => start + i
+    );
+
+    return `
+        <nav class="pagination" aria-label="Сторінки пропозицій">
+
+            <button
+                class="page-btn"
+                ${attribute}="${Math.max(1, page - 1)}"
+                ${page === 1 ? 'disabled' : ''}
+                aria-label="Попередня сторінка">
+                ←
             </button>
-            </article>`).join('')}
-            </div>`:`
+
+            ${start > 1 ? `
+                <button class="page-btn" ${attribute}="1">1</button>
+                <span class="page-ellipsis">…</span>
+            ` : ''}
+
+            ${numbers.map(n => `
+                <button
+                    class="page-btn ${n === page ? 'active' : ''}"
+                    ${attribute}="${n}"
+                    ${n === page ? 'aria-current="page"' : ''}>
+                    ${n}
+                </button>
+            `).join('')}
+
+            ${end < pages ? `
+                <span class="page-ellipsis">…</span>
+                <button class="page-btn" ${attribute}="${pages}">
+                    ${pages}
+                </button>
+            ` : ''}
+
+            <button
+                class="page-btn"
+                ${attribute}="${Math.min(pages, page + 1)}"
+                ${page === pages ? 'disabled' : ''}
+                aria-label="Наступна сторінка">
+                →
+            </button>
+
+            <span class="pagination-count">
+                Сторінка ${page} з ${pages} · ${total} пропозицій
+            </span>
+        </nav>
+    `;
+}
+// Admin: moderation queue (GET /api/Submissions?status=…); type is filtered here.
+function adminModeration() {
+    const isCurrent = beginView(() => adminModeration());
+
+    if (!requireAdmin()) return;
+
+    const filter = moderationFilter;
+    const type = moderationType;
+
+    const render = body => adminShell('moderation', `
+        <div class="toolbar filters" style="margin-top:18px">
+            ${MODERATION_FILTERS.map(([v, l]) => `
+                <button
+                    class="chip ${v === filter ? 'active' : ''}"
+                    data-modfilter="${v}">
+                    ${l}
+                </button>
+            `).join('')}
+        </div>
+
+        <div class="toolbar filters">
+            ${filterChips(
+                SUBMISSION_TYPE_FILTERS,
+                type,
+                'data-modtype'
+            )}
+        </div>
+
+        ${body}
+    `);
+
+    render(loadingBlock('Завантажуємо пропозиції…'));
+
+    Submissions.adminList(filter).then(all => {
+        if (!isCurrent()) return;
+
+        const items = all.filter(s => !type || s.type === type);
+
+        const pageCount = Math.max(
+            1,
+            Math.ceil(items.length / SUBMISSIONS_PER_PAGE)
+        );
+
+        moderationPage = Math.min(moderationPage, pageCount);
+
+        const start = (moderationPage - 1) * SUBMISSIONS_PER_PAGE;
+
+        const pageItems = items.slice(
+            start,
+            start + SUBMISSIONS_PER_PAGE
+        );
+
+        render(items.length ? `
+            <div class="submission-list">
+                ${pageItems.map(s => `
+                    <article class="panel submission-item">
+
+                        <div class="submission-head">
+                            <div>
+                                <h3>${esc(s.title)}</h3>
+
+                                <div class="small muted">
+                                    ${authorLink(s)}
+                                    · ${esc(fmtDateTime(s.createdAt))}
+                                    · ${esc(s.typeLabel)}
+                                </div>
+                            </div>
+
+                            ${submissionStatus(s)}
+                        </div>
+
+                        <button
+                            class="btn"
+                            data-submission="${esc(s.id)}">
+                            ${s.status === 'Pending'
+                                ? 'Розглянути'
+                                : 'Переглянути'}
+                        </button>
+
+                    </article>
+                `).join('')}
+            </div>
+
+            ${paginationHtml(
+                moderationPage,
+                items.length,
+                'data-modpage'
+            )}
+
+        ` : `
             <div class="empty">
-            <h3>${filter==='Pending'&&!type?'Немає пропозицій на розгляді':'Пропозицій не знайдено'}
-            </h3>
-            </div>`)
-    }).catch(error=>{
-        if(!isCurrent())return;
-        render(errorBlock('Не вдалося завантажити пропозиції',error,'moderation-retry'))
-    })
+                <h3>
+                    ${filter === 'Pending' && !type
+                        ? 'Немає пропозицій на розгляді'
+                        : 'Пропозицій не знайдено'}
+                </h3>
+            </div>
+        `);
+
+    }).catch(error => {
+        if (!isCurrent()) return;
+
+        render(errorBlock(
+            'Не вдалося завантажити пропозиції',
+            error,
+            'moderation-retry'
+        ));
+    });
 }
 // Admin: one submission with all submitted data; edit, approve or reject while it is pending.
 function adminSubmission(id){
@@ -1053,13 +1184,33 @@ function adminSubmission(id){
 function renderAdminSubmission(s,render,isCurrent){
     const cs=Catalog.state;
     const sameTitle=s.type==='NewGame'&&cs.status==='success'&&cs.games.some(g=>g.title.toLocaleLowerCase('uk')===s.title.toLocaleLowerCase('uk'));
-    const urlRow=(label,safe,raw)=>raw?`
-            <div class="field">
-            <label>${label}
-            </label>
-            <div>${safe?`<a href="${esc(safe)}" target="_blank" rel="noopener noreferrer">${esc(safe)}</a>`:`<span class="muted">некоректна адреса, не показано</span>`}
-            </div>
-            </div>`:'';
+    const urlRow = (label, safe, raw, kind) => raw ? `
+    <div class="submission-link-row">
+
+        <div class="submission-link-copy">
+            <span class="submission-link-label">
+                ${label}
+            </span>
+
+            <span class="submission-link-url">
+                ${safe ? esc(new URL(safe).hostname) : 'Некоректне посилання'}
+            </span>
+        </div>
+
+        ${safe ? `
+            <a
+                class="btn submission-link-btn"
+                href="${esc(safe)}"
+                target="_blank"
+                rel="noopener noreferrer">
+                ${kind === 'video' ? '▶ Дивитися трейлер' : '↗ Відкрити обкладинку'}
+            </a>
+        ` : `
+            <span class="small muted">Не вдалося відкрити</span>
+        `}
+
+    </div>
+` : '';
     const facts=[['Розробник',esc(s.developer)],['Видавець',esc(s.publisher)],['Дата виходу',esc(fmtDate(s.releaseDate))],['Автор',authorLink(s)],['Подано',esc(fmtDateTime(s.createdAt))],['Тип',esc(s.typeLabel)]].filter(([,v])=>v);
     render(`
             <div class="detail-layout" style="margin-top:18px">
@@ -1089,7 +1240,7 @@ function renderAdminSubmission(s,render,isCurrent){
             </label>
             <div>${v}
             </div>
-            </div>`).join('')}${urlRow('Обкладинка',s.coverUrl,s.rawCoverUrl)}${urlRow('Трейлер',s.trailerUrl,s.rawTrailerUrl)}
+           </div>`).join('')}${urlRow('Обкладинка', s.coverUrl, s.rawCoverUrl, 'image')}${urlRow('Трейлер', s.trailerUrl, s.rawTrailerUrl, 'video')}
             <hr class="divider">${s.status==='Pending'?`
             <button class="btn" style="width:100%;margin-bottom:12px" id="editSubmission">Редагувати перед рішенням
             </button>
@@ -1290,10 +1441,18 @@ function adminEditGame(id){
         render(errorBlock('Не вдалося завантажити гру',error))
     })
 }
-function adminPage(tab='moderation'){
-    if(tab==='create')adminCreateGame();
-    else adminModeration()
-    if(tab==='catalog'){adminCatalogGames();return}
+function adminPage(tab = 'moderation') {
+    if (tab === 'create') {
+        adminCreateGame();
+        return;
+    }
+
+    if (tab === 'catalog') {
+        adminCatalogGames();
+        return;
+    }
+
+    adminModeration();
 }
 
 // ---------- Sign-in (Google only: password sign-in is switched off on the server for the MVP) ----------
@@ -1931,14 +2090,32 @@ function bind(){
         const id=Number(b.dataset.submission);
         if(Number.isInteger(id)&&id>0)adminSubmission(id)
     }));
-    $$('[data-modfilter]').forEach(b=>b.addEventListener('click',()=>{
-        moderationFilter=b.dataset.modfilter;
-        adminModeration()
-    }));
-    $$('[data-modtype]').forEach(b=>b.addEventListener('click',()=>{
-        moderationType=b.dataset.modtype;
-        adminModeration()
-    }));
+    $$('[data-modfilter]').forEach(b =>
+    b.addEventListener('click', () => {
+        moderationFilter = b.dataset.modfilter;
+        moderationPage = 1;
+        adminModeration();
+    })
+);
+
+$$('[data-modtype]').forEach(b =>
+    b.addEventListener('click', () => {
+        moderationType = b.dataset.modtype;
+        moderationPage = 1;
+        adminModeration();
+    })
+);
+
+$$('[data-modpage]').forEach(b =>
+    b.addEventListener('click', () => {
+        const page = Number(b.dataset.modpage);
+
+        if (Number.isInteger(page) && page > 0) {
+            moderationPage = page;
+            adminModeration();
+        }
+    })
+);
     $$('[data-user]').forEach(b=>b.addEventListener('click',()=>{
         if(b.dataset.user)publicProfile(b.dataset.user)
     }));
