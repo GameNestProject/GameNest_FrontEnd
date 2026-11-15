@@ -372,10 +372,70 @@ h3 {
     min-width: 0;
 }
 
+
+.game-card {
+    position: relative;
+}
+
 .game-card:hover {
     transform: translateY(-3px);
     box-shadow: var(--shadow);
 }
+
+.game-preview {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 20px;
+    background: rgba(36, 33, 35, 0.96);
+    color: white;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(10px);
+    transition: opacity .25s ease, transform .25s ease,
+                visibility .25s ease;
+    pointer-events: none;
+}
+
+.game-card:hover .game-preview,
+.game-card:focus-within .game-preview {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+.game-preview h3 {
+    color: #f28a48;
+    font-size: 19px;
+    margin-bottom: 14px;
+}
+
+.game-preview p {
+    font-size: 13px;
+    line-height: 1.6;
+    margin-bottom: 9px;
+    color: #eee5df;
+}
+
+.game-preview .preview-description {
+    display: -webkit-box;
+    -webkit-line-clamp: 5;
+    line-clamp: 5;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    margin-top: 8px;
+}
+
+.game-preview .preview-hint {
+    margin-top: auto;
+    padding-top: 12px;
+    font-size: 11px;
+    color: #f28a48;
+}
+
 
 .poster {
     height: 155px;

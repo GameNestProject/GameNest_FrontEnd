@@ -211,24 +211,48 @@ function apiGameCard(g){
     return `
         <article class="game-card" aria-label="Гра ${esc(g.title)}">
             ${apiPoster(g)}
+
             <div class="card-body">
                 <div class="card-title-row">
                     <div>
                         <h3>${esc(g.title)}</h3>
                         <div class="small muted">${apiGameMeta(g)||'&nbsp;'}</div>
                     </div>
-                </div>${g.publisher?`
+                </div>
+
+                ${g.publisher?`
                 <div class="tag-row">
                     <span class="tag">${esc(g.publisher)}</span>
                 </div>`:''}
+
                 <div class="card-bottom">
-                    <button class="btn" data-api-game="${esc(g.id)}" aria-label="Детальніше про гру ${esc(g.title)}">
+                    <button class="btn" data-api-game="${esc(g.id)}"
+                        aria-label="Детальніше про гру ${esc(g.title)}">
                         Детальніше
                     </button>${catalogLibraryAction(g)}
                 </div>
             </div>
-        </article>`
+
+            <div class="game-preview" aria-hidden="true">
+                <h3>${esc(g.title)}</h3>
+
+                ${g.developer ? `
+                    <p><b>Розробник:</b> ${esc(g.developer)}</p>
+                ` : ''}
+
+                ${g.publisher ? `
+                    <p><b>Видавець:</b> ${esc(g.publisher)}</p>
+                ` : ''}
+
+                <p class="preview-description">
+                    ${esc(g.description || 'Опис гри поки відсутній.')}
+                </p>
+
+                <span class="preview-hint">Натисни «Детальніше», щоб переглянути гру</span>
+            </div>
+        </article>`;
 }
+
 function catalogResults(){
     const cs=Catalog.state;
     if(cs.status==='idle'||cs.status==='loading')return `
