@@ -66,11 +66,7 @@ function header(active = 'home') {
 
             <nav class="nav">
                 <button data-go="home" class="${active === 'home' ? 'active' : ''}">
-                    ⌂ &nbsp;Головна
-                </button>
-
-                <button data-go="discover" class="${active === 'discover' ? 'active' : ''}">
-                    ⌕ &nbsp;Каталог
+                    ⌂ &nbsp;Каталог
                 </button>
 
                 <button data-go="library" class="${active === 'library' ? 'active' : ''}">
@@ -142,7 +138,7 @@ function runHealthChecks(){
 // Page to open after signing in: a route name or a function (e.g. back to a game page).
 let afterSignIn=null;
 function openAfterSignIn(){
-    const next=afterSignIn||'discover';
+    const next=afterSignIn||'home';
     afterSignIn=null;
     if(typeof next==='function')next();
     else go(next)
@@ -173,7 +169,7 @@ function requireAdmin(){
     if(!u)return null;
     if(!u.isAdmin){
         toast('Цей розділ доступний лише адміністратору.');
-        go('discover');
+        go('home');
         return null
     }
     return u
@@ -321,9 +317,14 @@ function catalogCount(){
     const cs=Catalog.state;
     return cs.status==='success'?pluralGames(cs.games.length):cs.status==='error'?'Недоступно':'Завантаження…'
 }
-// ---------- Головна сторінка ----------
+// ---------- Головна сторінка = каталог ігор (GET /api/Games) ----------
+// One page: the hero on top, the full catalog (search, sort, reset) below it. Served at "/";
+// the old "/catalog" address opens the same page.
 function home() {
     rerender = () => home();
+
+    const cs = Catalog.state;
+    const ready = cs.status === 'success' && cs.games.length > 0;
 
     const content = `
         <main class="container" data-page="home">
@@ -344,7 +345,7 @@ function home() {
                     </p>
 
                     <div class="hero-actions">
-                        <button class="btn primary" data-go="discover">
+                        <button class="btn primary" data-scroll="catalog">
                             Переглянути каталог →
                         </button>
 
@@ -358,24 +359,11 @@ function home() {
                     <img src="/assets/gamenest-logo.png" alt="GameNest">
                 </div>
             </section>
-        </main>`;
 
-    layout(content, 'home');
-}
-
-// ---------- Каталог ігор ----------
-function discover() {
-    rerender = () => discover();
-
-    const cs = Catalog.state;
-    const ready = cs.status === 'success' && cs.games.length > 0;
-
-    const content = `
-        <main class="container" data-page="discover">
-            <div class="section-head">
+            <div class="section-head" id="catalog">
                 <div>
                     <div class="eyebrow">Вибирай наступну пригоду</div>
-                    <h1 style="font-size:36px">Каталог ігор</h1>
+                    <h2>Каталог ігор</h2>
                     <p class="muted small">
                         Знайди гру за назвою, розробником, видавцем або описом.
                     </p>
@@ -419,7 +407,7 @@ function discover() {
             </div>
         </main>`;
 
-    layout(content, 'discover');
+    layout(content, 'home');
     bindCatalogControls();
     bindCatalogGrid();
 
@@ -437,7 +425,7 @@ function onCoverError(img){
     img.closest('.poster')?.classList.remove('has-cover');
     img.remove()
 }
-// Delegated listeners, attached once per #gameGrid element (discover() creates a new one).
+// Delegated listeners, attached once per #gameGrid element (home() creates a new one).
 // Search, sort, reset and library changes only replace the grid's content, so no listeners pile up.
 function bindCatalogGrid(){
     const grid=$('#gameGrid');
@@ -484,7 +472,7 @@ function renderCatalogResults(){
 async function quickAddToLibrary(gameId,button){
     if(!Number.isInteger(gameId)||gameId<=0)return;
     if(!me()){
-        afterSignIn='discover';
+        afterSignIn='home';
         toast('Увійди, щоб додати гру до бібліотеки.');
         auth();
         return
@@ -522,7 +510,7 @@ function apiDetail(id){
 }
 function renderApiDetail(id,view,isCurrent){
     const back=`
-            <button class="btn" data-go="discover">← Назад до каталогу
+            <button class="btn" data-go="home">← Назад до каталогу
             </button>`;
     detailGame=null;
     if(view.status==='not-found'||view.status==='error'||(view.status==='loading'&&!view.game)){
@@ -532,7 +520,7 @@ function renderApiDetail(id,view,isCurrent){
             </h3>
             <p>Можливо, її архівовано або посилання застаріло.
             </p>
-            <button class="btn primary" data-go="discover">До каталогу
+            <button class="btn primary" data-go="home">До каталогу
             </button>
             </div>`:`
             <div class="empty" role="alert">
@@ -547,7 +535,7 @@ function renderApiDetail(id,view,isCurrent){
             <main class="container" data-page="game">${back}
             <div style="margin-top:22px">${body}
             </div>
-            </main>`,'discover');
+            </main>`,'home');
         return
     }
     const g=view.game;
@@ -613,7 +601,7 @@ function renderApiDetail(id,view,isCurrent){
             </div>`:''}
             </aside>
             </div>
-            </main>`,'discover');
+            </main>`,'home');
     if(!loaded)return;
     detailGame=g;
     bindLibraryPanel(g);
@@ -743,7 +731,7 @@ async function archiveGame(g,button){
     try{
         await Catalog.archiveGame(g.id);
         toast('Гру архівовано.');
-        if(detailGame?.id===g.id&&$('main[data-page="game"]'))discover()
+        if(detailGame?.id===g.id&&$('main[data-page="game"]'))go('home')
     }catch(error){
         toast(describe(error));
         if(button.isConnected)button.disabled=false
@@ -887,7 +875,7 @@ function submissionForm(opts={mode:'new'}){
         :mode==='edit'&&opts.admin?`<button class="btn" data-submission="${esc(opts.submission.id)}">← До пропозиції</button>`
         :mode==='edit'?`<button class="btn" data-go="submissions">← До моїх пропозицій</button>`
         :opts.prefill?`<button class="btn" data-go="mygames">← До моїх ігор</button>`
-        :`<button class="btn" data-go="discover">← До каталогу</button>`;
+        :`<button class="btn" data-go="home">← До каталогу</button>`;
     layout(`
             <main class="container" data-page="submit">${back}
             <div class="section-head" style="margin-top:18px">
@@ -906,7 +894,7 @@ function submissionForm(opts={mode:'new'}){
             </div>`:''}
             <section class="panel">${gameFieldsForm('submissionForm',texts.submit)}
             </section>
-            </main>`,opts.admin?'admin':'discover');
+            </main>`,opts.admin?'admin':'home');
     const form=$('#submissionForm');
     if(mode==='correction')fillGameForm(form,formValuesOf(opts.game));
     if(mode==='edit')fillGameForm(form,formValuesOf(opts.submission));
@@ -1599,6 +1587,7 @@ async function onGoogleCredential(credential){
 
 // ---------- Library (API: GameNestLibrary) ----------
 let libraryFilter='';
+// No hover overlay on library cards: the status select, "Куплено" and the buttons stay visible and usable.
 function libraryCard(item){
     const g=item.game||{id:item.gameId,title:`Гра #${item.gameId}`,coverUrl:null};
     return `
@@ -1627,25 +1616,6 @@ function libraryCard(item){
                     <button class="btn danger" data-lib-remove="${esc(item.gameId)}" title="Прибрати з бібліотеки">Прибрати</button>
                 </div>
             </div>
-            <div class="game-card-preview">
-    <h3>${esc(g.title)}</h3>
-
-    ${g.developer ? `
-        <p><b>Розробник:</b> ${esc(g.developer)}</p>
-    ` : ''}
-
-    ${g.publisher ? `
-        <p><b>Видавець:</b> ${esc(g.publisher)}</p>
-    ` : ''}
-
-    <p class="game-card-preview-description">
-        ${esc(g.description || 'Опис гри поки відсутній.')}
-    </p>
-
-    <span class="game-card-preview-hint">
-        Переглянь детальну інформацію про гру
-    </span>
-</div>
         </article>`
 }
 function libraryPage(){
@@ -1665,7 +1635,7 @@ function libraryPage(){
             </p>
             </div>
             <div class="row-actions">
-            <button class="btn primary" data-go="discover">Переглянути каталог
+            <button class="btn primary" data-go="home">Переглянути каталог
             </button>
             <button class="btn" data-go="mygames">Мої власні ігри
             </button>
@@ -1718,7 +1688,7 @@ function libraryPage(){
             </h3>
             <p>Додай ігри з каталогу GameNest кнопкою «＋» або на сторінці гри.
             </p>
-            <button class="btn primary" data-go="discover">Відкрити каталог
+            <button class="btn primary" data-go="home">Відкрити каталог
             </button>
             </div>`}
             </div>`);
@@ -2116,7 +2086,7 @@ function publicProfile(username){
     const isCurrent=beginView(()=>publicProfile(username));
     const render=body=>layout(`
             <main class="container" data-page="user">
-            <button class="btn" data-go="discover">← До каталогу
+            <button class="btn" data-go="home">← До каталогу
             </button>
             <div style="margin-top:18px">${body}
             </div>
@@ -2160,7 +2130,6 @@ function publicProfile(username){
 // Перетворює назву сторінки на URL.
 function routeUrl(page, arg) {
     if (page === 'home') return '/';
-    if (page === 'discover') return '/catalog';
     if (page === 'library') return '/library';
     if (page === 'profile') return '/profile';
     if (page === 'admin') {
@@ -2188,7 +2157,6 @@ if (page === 'adminSubmission') {
 // Відображає сторінку відповідно до маршруту.
 function renderRoute(page, arg) {
     if (page === 'home') home();
-    else if (page === 'discover') discover();
     else if (page === 'auth') auth();
     else if (page === 'library') libraryPage();
     else if (page === 'mygames') myGames();
@@ -2226,7 +2194,9 @@ function openCurrentRoute() {
     if (parts.length === 0) {
         renderRoute('home');
     } else if (path === '/catalog') {
-        renderRoute('discover');
+        // The catalog is the home page now; old links and bookmarks land on it.
+        window.history.replaceState({ page: 'home' }, '', '/');
+        renderRoute('home');
     } else if (path === '/library') {
         renderRoute('library');
     } else if (path === '/profile') {
@@ -2277,7 +2247,7 @@ function bind(){
     $$('[data-action="logout"]').forEach(b=>b.addEventListener('click',()=>{
         session.signOut();
         toast('Ти вийшов з акаунта.');
-        go('discover');
+        go('home');
     }));
     $$('[data-action="retry-profile"]').forEach(b=>b.addEventListener('click',()=>session.reloadProfile()));
 $$('[data-submission]').forEach(b =>
@@ -2385,13 +2355,13 @@ session.subscribe(st=>{
     if(st.status==='authenticated'&&Library.state.status==='idle')Library.load();
     rerender()
 });
-// The catalog loads asynchronously; refresh the catalog page (only) when its state changes.
+// The catalog loads asynchronously; refresh the home (catalog) page (only) when its state changes.
 Catalog.subscribe(()=>{
-    if($('main[data-page="discover"]'))discover()
+    if($('main[data-page="home"]'))home()
 });
 // Library changes refresh only what shows the library: catalog cards, the game page panel, the library page.
 Library.subscribe(()=>{
-    if($('main[data-page="discover"]'))renderCatalogResults();
+    if($('main[data-page="home"]'))renderCatalogResults();
     else if($('main[data-page="game"]'))refreshLibraryPanel();
     else if($('main[data-page="library"]'))libraryPage();
     else if($('main[data-page="profile"]')&&$('#statLibrary')&&Library.state.status==='success')$('#statLibrary').textContent=Library.state.items.length
