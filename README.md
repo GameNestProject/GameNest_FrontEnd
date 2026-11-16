@@ -30,7 +30,7 @@ Web client for **GameNest** — browse a video game catalog, keep a personal gam
 The site is a set of static files, so any static server works. It must be served on **port 3000**, because the backend allows CORS in Development only from `http://localhost:3000`.
  
 1. Start the backend locally (see its README): the API must listen on `http://localhost:5096`.
-2. Serve this folder on port 3000 **with single-page-app fallback** (the app has real URLs such as `/catalog` or `/library`, so a refresh on them must return `index.html`):
+2. Serve this folder on port 3000 **with single-page-app fallback** (the app has real URLs such as `/library` or `/game/{id}`, so a refresh on them must return `index.html`):
 ```bash
 npx serve -s . -l 3000
 ```
@@ -82,8 +82,8 @@ Scripts are loaded as classic `<script>` tags and talk to each other through glo
  
 | URL | Page | Access |
 | --- | --- | --- |
-| `/` | Home | everyone |
-| `/catalog` | Game catalog | everyone |
+| `/` | Home page with the full game catalog (search, sorting) | everyone |
+| `/catalog` | Old address, redirects to `/` | everyone |
 | `/game/{id}` | Game page | everyone |
 | `/user/{username}` | Public profile | everyone (if the profile is public) |
 | `/login` | Sign in with Google | everyone |
@@ -115,7 +115,7 @@ npx wrangler deploy
  
 Or connect the GitHub repository to Cloudflare so that every push to `main` deploys automatically. The Worker name in `wrangler.jsonc` must match the project name in Cloudflare.
  
-> **Important:** the app uses real URLs (`/catalog`, `/library`, …). Static assets hosting must be told to return `index.html` for unknown paths, otherwise opening or refreshing such a URL gives a 404. In `wrangler.jsonc` this is `"assets": { "not_found_handling": "single-page-application" }`.
+> **Important:** the app uses real URLs (`/library`, `/game/{id}`, …). Static assets hosting must be told to return `index.html` for unknown paths, otherwise opening or refreshing such a URL gives a 404. In `wrangler.jsonc` this is `"assets": { "not_found_handling": "single-page-application" }`.
  
 On the backend side, `CORS_ALLOWED_ORIGINS` must contain the exact origin the site is served from (`https://gamenest.pp.ua`), and the same origin must be an *Authorized JavaScript origin* of the Google client.
  
