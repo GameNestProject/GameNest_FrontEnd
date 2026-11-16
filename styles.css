@@ -412,81 +412,221 @@ h3 {
     box-shadow: var(--shadow);
 }
 
-/* Додаткова інформація при наведенні */
-.game-card-preview {
-    position: absolute;
-    inset: 0;
-    z-index: 5;
-
+/* Картки каталогу та бібліотеки: фіксована висота, без затемнення.
+   Колонка: обкладинка фіксованої висоти → назва → опис (обрізається з «…») → дії, притиснуті донизу. */
+.catalog-card,
+.library-card {
     display: flex;
     flex-direction: column;
-    justify-content: flex-end;
-    gap: 8px;
-
-    /* The bottom padding leaves the card's buttons (raised above the overlay) uncovered. */
-    padding: 22px 18px 66px;
-    border-radius: inherit;
-
-    /* Light at the top so the cover stays visible, darker only where the text sits. */
-    background: linear-gradient(
-        to top,
-        rgba(36, 33, 35, .9) 0%,
-        rgba(36, 33, 35, .78) 45%,
-        rgba(36, 33, 35, .22) 100%
-    );
-    color: white;
-    text-shadow: 0 1px 3px rgba(0, 0, 0, .55);
-
-    opacity: 0;
-    visibility: hidden;
-    transform: translateY(8px);
-
-    transition:
-        opacity .25s ease,
-        transform .25s ease,
-        visibility .25s ease;
-
-    pointer-events: none;
+    height: var(--card-height);
+    cursor: pointer;
 }
 
-/* "Детальніше" and "+" stay above the hover overlay, fully visible and clickable. */
-.game-card .card-bottom {
-    position: relative;
-    z-index: 6;
+.catalog-card {
+    --card-height: 340px;
 }
 
-.game-card:hover .game-card-preview,
-.game-card:focus-within .game-card-preview {
-    opacity: 1;
-    visibility: visible;
-    transform: translateY(0);
+.library-card {
+    --card-height: 446px;
 }
 
-.game-card-preview h3 {
-    color: #f28a48;
-    font-size: 20px;
+.catalog-card .poster,
+.library-card .poster {
+    flex: none;
+    /* Its layers stay inside the poster, under the card link. */
+    isolation: isolate;
+}
+
+/* With a real cover there is no darkening gradient and no title on top of it: the title is right below. */
+.game-card .poster.has-cover:before,
+.game-card .poster.has-cover .poster-title {
+    display: none;
+}
+
+.catalog-card .card-body,
+.library-card .card-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.card-title {
+    font-size: 15px;
+    line-height: 1.3;
     margin: 0;
-}
-
-.game-card-preview p {
-    color: #eee5df;
-    font-size: 13px;
-    line-height: 1.55;
-    margin: 0;
-}
-
-.game-card-preview-description {
+    min-width: 0;
+    overflow-wrap: anywhere;
     display: -webkit-box;
-    -webkit-line-clamp: 4;
-    line-clamp: 4;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    transition: color .2s ease;
+}
+
+/* On narrow cards the status badge moves under the title instead of squeezing it mid-word. */
+.library-card .card-title-row {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    row-gap: 6px;
+}
+
+.library-card .card-title-row .card-title {
+    flex: 1 1 7.5em;
+    overflow-wrap: break-word;
+}
+
+.library-card .card-title-row .status {
+    flex: none;
+}
+
+.card-link {
+    color: inherit;
+    text-decoration: none;
+}
+
+/* The title link covers the whole card, so a click anywhere on it opens the game page. */
+.card-link::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    border-radius: inherit;
+}
+
+.card-link:focus-visible {
+    outline: none;
+}
+
+.card-link:focus-visible::after {
+    border-radius: 17px;
+    box-shadow: inset 0 0 0 3px var(--orange2);
+}
+
+.card-description {
+    margin: 0;
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: #756c66;
+    overflow-wrap: anywhere;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
     -webkit-box-orient: vertical;
     overflow: hidden;
 }
 
-.game-card-preview-hint {
-    padding-top: 4px;
-    color: #f28a48;
-    font-size: 11px;
+.library-card .card-description {
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+}
+
+.card-description.is-empty {
+    font-style: italic;
+    color: #a2968d;
+}
+
+/* Clickable hint without darkening: lift, softer shadow, accent border and title. */
+.catalog-card:hover,
+.library-card:hover,
+.catalog-card:focus-within,
+.library-card:focus-within {
+    border-color: #efc3a6;
+}
+
+.catalog-card:hover .card-title,
+.library-card:hover .card-link {
+    color: var(--orange);
+}
+
+/* Actions stay at the bottom of every card, above the card link. */
+.catalog-card .card-bottom,
+.library-card .card-bottom {
+    margin-top: auto;
+    padding-top: 6px;
+    justify-content: flex-end;
+    min-height: 48px;
+}
+
+.catalog-card .card-bottom > *,
+.library-card .card-bottom > *,
+.library-card .library-controls {
+    position: relative;
+    z-index: 2;
+}
+
+.library-card .library-controls {
+    margin-top: 4px;
+    cursor: default;
+}
+
+.card-add-btn {
+    width: 42px;
+    height: 42px;
+    flex: none;
+    display: inline-grid;
+    place-items: center;
+    border: 1px solid #f0c9ae;
+    border-radius: 12px;
+    background: #fff4ec;
+    color: var(--orange);
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1;
+    transition: background .18s ease, color .18s ease, border-color .18s ease, transform .18s ease;
+}
+
+.card-add-btn:hover:not(:disabled) {
+    background: var(--orange);
+    border-color: var(--orange);
+    color: white;
+    transform: translateY(-1px);
+}
+
+.card-add-btn:focus-visible {
+    outline: 3px solid var(--orange2);
+    outline-offset: 2px;
+}
+
+.card-add-btn:disabled {
+    opacity: .5;
+    cursor: not-allowed;
+}
+
+@media (max-width: 760px) {
+    .catalog-card {
+        --card-height: 318px;
+    }
+
+    .library-card {
+        --card-height: 428px;
+    }
+}
+
+@media (max-width: 420px) {
+    .catalog-card {
+        --card-height: 296px;
+    }
+
+    .library-card {
+        --card-height: 410px;
+    }
+
+    .card-title {
+        font-size: 13px;
+    }
+
+    .card-description {
+        font-size: 12px;
+    }
+
+    .card-add-btn {
+        width: 38px;
+        height: 38px;
+        font-size: 20px;
+    }
 }
 
 /* Адаптивність */
