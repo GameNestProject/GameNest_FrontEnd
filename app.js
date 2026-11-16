@@ -207,73 +207,39 @@ function libraryBadge(item){
 }
 // "+" adds a catalog game to the library (Planned). Signed-in users only see it once their library is loaded,
 // so it never offers a game that is already there.
+function catalogAddButton(g){
+    return `
+                    <button class="card-add-btn" type="button" data-lib-add="${esc(g.id)}" title="Додати до бібліотеки" aria-label="Додати «${esc(g.title)}» до бібліотеки">＋
+                    </button>`
+}
 function catalogLibraryAction(g){
-    if(!me())return `
-                    <button class="icon-btn" data-lib-add="${esc(g.id)}" title="Додати до бібліотеки" aria-label="Додати «${esc(g.title)}» до бібліотеки">＋
-                    </button>`;
+    if(!me())return catalogAddButton(g);
     if(Library.state.status!=='success')return '';
     const item=Library.itemFor(g.id);
-    return item?libraryBadge(item):`
-                    <button class="icon-btn" data-lib-add="${esc(g.id)}" title="Додати до бібліотеки" aria-label="Додати «${esc(g.title)}» до бібліотеки">＋
-                    </button>`
+    return item?libraryBadge(item):catalogAddButton(g)
+}
+
+// Card title. Its link is stretched over the whole card (CSS ::after), so a click anywhere on the card opens
+// the game page; the card's own controls sit above it. Without a link (archived game) it is plain text.
+function cardTitle(g,{link=true}={}){
+    return `
+                <h3 class="card-title">${link?`<a class="card-link" href="${esc(routeUrl('game',g.id))}" data-api-game="${esc(g.id)}">${esc(g.title)}</a>`:esc(g.title)}</h3>`
+}
+// The description comes from the game itself; only its absence gets a neutral placeholder.
+function cardDescription(text,fallback='Опис гри поки відсутній.'){
+    return `
+                <p class="card-description${text?'':' is-empty'}">${esc(text||fallback)}</p>`
 }
 
 function apiGameCard(g) {
     return `
-        <article class="game-card" aria-label="Гра ${esc(g.title)}">
+        <article class="game-card catalog-card" aria-label="Гра ${esc(g.title)}">
             ${apiPoster(g)}
-
-            <div class="card-body">
-                <div class="card-title-row">
-                    <div>
-                        <h3>${esc(g.title)}</h3>
-                        <div class="small muted">
-                            ${apiGameMeta(g) || '&nbsp;'}
-                        </div>
-                    </div>
-                </div>
-
-                ${g.publisher ? `
-                    <div class="tag-row">
-                        <span class="tag">${esc(g.publisher)}</span>
-                    </div>
-                ` : ''}
-
-                <div class="card-bottom">
-                    <button class="btn"
-                        data-api-game="${esc(g.id)}"
-                        aria-label="Детальніше про гру ${esc(g.title)}">
-                        Детальніше
-                    </button>
-                    ${catalogLibraryAction(g)}
+            <div class="card-body">${cardTitle(g)}${cardDescription(g.description)}
+                <div class="card-bottom">${catalogLibraryAction(g)}
                 </div>
             </div>
-
-            <div class="game-card-preview">
-                <h3>${esc(g.title)}</h3>
-
-                ${g.developer ? `
-                    <p><b>Розробник:</b> ${esc(g.developer)}</p>
-                ` : ''}
-
-                ${g.publisher ? `
-                    <p><b>Видавець:</b> ${esc(g.publisher)}</p>
-                ` : ''}
-
-                ${g.releaseYear ? `
-                    <p><b>Рік виходу:</b> ${esc(g.releaseYear)}</p>
-                ` : ''}
-
-                <p class="game-card-preview-description">
-                    ${esc(g.description || 'Опис гри поки відсутній.')}
-                </p>
-
-                <span class="game-card-preview-hint">
-                    Натисни «Детальніше», щоб відкрити сторінку гри
-                </span>
-            </div>
-        </article>
-    `;
+        </article>`;
 }
 
 
@@ -420,6 +386,13 @@ function openApiGame(el) {
         go('game', id);
     }
 }
+// Click on a game button or card link. A plain click stays in the app (no page reload); Ctrl/Cmd/Shift/Alt
+// clicks on a link keep the browser's own behaviour (new tab or window), since the link has a real href.
+function onGameClick(e,el){
+    if(el.tagName==='A'&&(e.button!==0||e.ctrlKey||e.metaKey||e.shiftKey||e.altKey))return;
+    e.preventDefault();
+    openApiGame(el)
+}
 // A broken cover image falls back to the gradient placeholder underneath it.
 function onCoverError(img){
     img.closest('.poster')?.classList.remove('has-cover');
@@ -436,13 +409,16 @@ function bindCatalogGrid(){
             Catalog.load({force:true});
             return
         }
+        // "+" sits outside the card link (above its stretched area), so it never opens the game page;
+        // stopPropagation additionally keeps the click away from any listener further up.
         const add=e.target.closest('[data-lib-add]');
         if(add&&grid.contains(add)){
+            e.stopPropagation();
             quickAddToLibrary(Number(add.dataset.libAdd),add);
             return
         }
-        const card=e.target.closest('[data-api-game]');
-        if(card&&grid.contains(card))openApiGame(card)
+        const link=e.target.closest('[data-api-game]');
+        if(link&&grid.contains(link))onGameClick(e,link)
     });
     // "error" does not bubble, so it is caught in the capture phase.
     grid.addEventListener('error',e=>{
@@ -1587,21 +1563,18 @@ async function onGoogleCredential(credential){
 
 // ---------- Library (API: GameNestLibrary) ----------
 let libraryFilter='';
-// No hover overlay on library cards: the status select, "Куплено" and the buttons stay visible and usable.
+// Same structure as the catalog card (cover, title, description, actions at the bottom), plus the status controls.
+// The whole card opens the game page, except for archived games (their page is gone from the catalog).
+// The status select, "Куплено" and "Прибрати" sit above the card link, so they keep working on their own.
 function libraryCard(item){
     const g=item.game||{id:item.gameId,title:`Гра #${item.gameId}`,coverUrl:null};
     return `
         <article class="game-card library-card" aria-label="Гра ${esc(g.title)}" data-lib-item="${esc(item.gameId)}">
             ${apiPoster(g)}
             <div class="card-body">
-                <div class="card-title-row">
-                    <div>
-                        <h3>${esc(g.title)}</h3>
-                        <div class="small muted">${apiGameMeta(g)||'&nbsp;'}</div>
-                    </div>
+                <div class="card-title-row">${cardTitle({id:item.gameId,title:g.title},{link:!g.isArchived})}
                     ${libraryBadge(item)}
-                </div>${g.isArchived?`
-                <p class="small muted">Гру архівовано в каталозі.</p>`:''}
+                </div>${g.isArchived?cardDescription('Гру архівовано в каталозі.'):cardDescription(g.description)}
                 <div class="library-controls">
                     <label class="small muted" for="libItemStatus-${esc(item.gameId)}">Статус</label>
                     <select class="search" id="libItemStatus-${esc(item.gameId)}" data-lib-status="${esc(item.gameId)}">${statusOptions(item.status)}
@@ -1611,8 +1584,7 @@ function libraryCard(item){
                         <span>Куплено</span>
                     </label>
                 </div>
-                <div class="card-bottom">${g.isArchived?'<span></span>':`
-                    <button class="btn" data-api-game="${esc(item.gameId)}">Детальніше</button>`}
+                <div class="card-bottom">
                     <button class="btn danger" data-lib-remove="${esc(item.gameId)}" title="Прибрати з бібліотеки">Прибрати</button>
                 </div>
             </div>
@@ -2298,7 +2270,7 @@ $$('[data-modpage]').forEach(b =>
     $$('[data-action="mygames-retry"]').forEach(b=>b.addEventListener('click',()=>myGames()));
     $$('[data-action="library-retry"]').filter(b=>!b.closest('#libraryPanel')).forEach(b=>b.addEventListener('click',()=>Library.load({force:true})));
     // API catalog games. Elements inside #gameGrid are handled by bindCatalogGrid() (delegation), not here.
-    $$('[data-api-game]').filter(b=>!b.closest('#gameGrid')).forEach(b=>b.addEventListener('click',()=>openApiGame(b)));
+    $$('[data-api-game]').filter(b=>!b.closest('#gameGrid')).forEach(b=>b.addEventListener('click',e=>onGameClick(e,b)));
     $$('img[data-cover]').filter(img=>!img.closest('#gameGrid')).forEach(img=>img.addEventListener('error',()=>onCoverError(img),{once:true}));
     $$('[data-scroll]').forEach(b=>b.addEventListener('click',()=>document.getElementById(b.dataset.scroll)?.scrollIntoView({behavior:'smooth'})));
 $$('[data-admintab]').forEach(b =>

@@ -18,7 +18,7 @@ Web client for **GameNest** — browse a video game catalog, keep a personal gam
 - Public user profiles and privacy settings (profile and library visibility), change of username
 - **Admin area** (role `Admin`): moderate submissions (approve / reject with a comment), add games, edit and archive catalog games
 - Clear error messages for API error codes, rate limiting (`429`) and a sleeping backend (the free Render instance can take about a minute to wake up)
-- - Game catalog with search and sorting, hover previews on cards, and a page for each game (with trailer link)
+- Game cards of the same height (cover, title, short description, "+" to add to the library); the whole card opens the game page
 ## Tech Stack
  
 - Plain HTML, CSS and JavaScript — **no framework, no bundler, no `npm install`**
